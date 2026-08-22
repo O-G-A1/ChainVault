@@ -1,0 +1,25 @@
+# Example fly.toml. Run `fly launch` to generate and configure for your app.
+app = "onchainvault-example"
+
+[build]
+  image = "registry.fly.io/onchainvault-example:latest"
+
+[env]
+  # Set environment variables here or use `fly secrets set`
+  # RESEND_API_KEY = "..."
+  # EMAIL_FROM = "..."
+  # EMAIL_TO = "..."
+  # SUPABASE_URL = "https://xyz.supabase.co"
+  # SUPABASE_KEY = "..."
+
+[[services]]
+  internal_port = 3000
+  protocol = "tcp"
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls","http"]
+    port = 443
