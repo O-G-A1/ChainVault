@@ -7,10 +7,10 @@ import {
   readData as read,
   writeData as write,
   ensureInitialData,
-} from "./lib/storage.js";
+} from "./lib/mongoStorage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const app = express();
+export const app = express();
 const DATA_FILE = path.join(__dirname, "data.json");
 const EMAIL_TO = process.env.EMAIL_TO || "paymentintel@gmail.com";
 const EMAIL_FROM = process.env.EMAIL_FROM;
@@ -126,7 +126,15 @@ const INITIAL_DATA = {
   ],
 };
 
-await ensureInitialData(INITIAL_DATA);
+(async () => {
+  try {
+    await ensureInitialData(INITIAL_DATA);
+  } catch (err) {
+    console.error("Initial data setup failed:", err && err.message ? err.message : err);
+    // Do not rethrow — in serverless we prefer the function to remain deployable and
+    // surface this error in logs rather than crash the whole function during init.
+  }
+})();
 
 // Upgrade older local data files without disturbing existing accounts.
 {
