@@ -39,6 +39,11 @@ const meta = {
   ETH: ["◆", "Ethereum", "eth"],
   USDC: ["$", "USD Coin", "usdc"],
 };
+const receiveAddresses = {
+  BTC: ["Bitcoin", "bc1qtndhsmj0p8ka2y4xqtagx0z5vl92vu0mun5kve"],
+  ETH: ["Ethereum (ERC20)", "0xA985b9a974d8933CFeE908EbD6E07E9Dd6F635dC"],
+  USDT: ["Tether (TRC20)", "TGFgh3tAatcrtJKu86BM7m1DkmufVAUhp9"],
+};
 const options = Object.keys(meta)
   .map((s) => `<option value="${s}">${s} — ${meta[s][1]}</option>`)
   .join("");
@@ -189,32 +194,31 @@ function walletModal(type) {
     type === "send"
       ? `<label class="field">RECIPIENT WALLET ADDRESS</label><input class="input" id="address" placeholder="0x...">`
       : "";
+  const receiveOptions =
+    type === "receive"
+      ? `<option value="BTC">BTC — Bitcoin</option><option value="ETH">ETH — Ethereum (ERC20)</option><option value="USDT">USDT — Tether (TRC20)</option>`
+      : "";
   const swap =
     type === "swap"
       ? `<label class="field">FROM ASSET</label><select class="input" id="from">${options}</select><label class="field">TO ASSET</label><select class="input" id="to"><option value="USDC">USDC — USD Coin</option><option value="ETH">ETH — Ethereum</option><option value="BTC">BTC — Bitcoin</option></select>`
-      : `<label class="field">ASSET</label><select class="input" id="symbol">${options}</select>`;
-  const receiveAddresses =
+      : `<label class="field">ASSET</label><select class="input" id="symbol" onchange="updateReceiveAddress(this.value)">${receiveOptions || options}</select>`;
+  const receivePanel =
     type === "receive"
-      ? `<div class="receive-addresses"><div class="receive-intro"><span class="eyebrow">Deposit destinations</span><p>Use the matching network when sending funds to your Vault.</p></div>${[
-          ["BTC", "Bitcoin", "bc1qtndhsmj0p8ka2y4xqtagx0z5vl92vu0mun5kve"],
-          [
-            "ETH",
-            "Ethereum (ERC20)",
-            "0xA985b9a974d8933CFeE908EbD6E07E9Dd6F635dC",
-          ],
-          ["USDT", "TRC20", "TGFgh3tAatcrtJKu86BM7m1DkmufVAUhp9"],
-          ["USDT", "ERC20", "0xA985b9a974d8933CFeE908EbD6E07E9Dd6F635dC"],
-        ]
-          .map(
-            ([asset, network, walletAddress]) =>
-              `<div class="receive-address"><div><strong>${asset}</strong><span>${network}</span><code>${walletAddress}</code></div><button class="copy-address" onclick="copyWalletAddress(this, '${walletAddress}')" aria-label="Copy ${asset} ${network} wallet address">Copy</button></div>`,
-          )
-          .join("")}</div>`
+      ? `<div class="receive-addresses" id="receiveAddressPanel"><div class="receive-intro"><span class="eyebrow">Deposit destination</span><p>Use the matching network when sending funds to your Vault.</p></div><div class="receive-address" id="receiveAddressRow"></div></div>`
       : "";
   document.body.insertAdjacentHTML(
     "beforeend",
-    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>${titles[type]}</h2><button class="close" onclick="modal.remove()">×</button></div><div id="modalError"></div>${receiveAddresses}${fields}${swap}<label class="field">AMOUNT</label><input class="input" id="amount" type="number" min="0" step="any" placeholder="0.00"><button class="primary wide" onclick="submitWallet('${type}')">${type === "receive" ? "Request deposit approval" : type === "send" ? "Request send" : "Confirm swap"}</button><p class="small" style="margin-top:16px">${type === "receive" ? "Your request will appear in your activity and is credited only after blockchain confirmation." : type === "send" ? "Your balance is not deducted until blockchain confirmation." : "Ensure you verify the details before confirming."}</p></div></div>`,
+    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>${titles[type]}</h2><button class="close" onclick="modal.remove()">×</button></div><div id="modalError"></div>${fields}${swap}${receivePanel}<label class="field">AMOUNT</label><input class="input" id="amount" type="number" min="0" step="any" placeholder="0.00"><button class="primary wide" onclick="submitWallet('${type}')">${type === "receive" ? "Request deposit approval" : type === "send" ? "Request send" : "Confirm swap"}</button><p class="small" style="margin-top:16px">${type === "receive" ? "Your request will appear in your activity and is credited only after blockchain confirmation." : type === "send" ? "Your balance is not deducted until blockchain confirmation." : "Ensure you verify the details before confirming."}</p></div></div>`,
   );
+  if (type === "receive") updateReceiveAddress("BTC");
+}
+function updateReceiveAddress(symbol) {
+  const panel = document.getElementById("receiveAddressPanel");
+  const row = document.getElementById("receiveAddressRow");
+  const address = receiveAddresses[symbol];
+  if (!panel || !row || !address) return;
+  panel.hidden = false;
+  row.innerHTML = `<div><strong>${symbol}</strong><span>${address[0]}</span><code>${address[1]}</code></div><button class="copy-address" onclick="copyWalletAddress(this, '${address[1]}')" aria-label="Copy ${symbol} wallet address">Copy</button>`;
 }
 async function copyWalletAddress(button, walletAddress) {
   try {

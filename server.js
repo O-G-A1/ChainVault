@@ -179,7 +179,7 @@ const initializeData = () => {
   return initialization;
 };
 
-const PRICES = { BTC: 66008.36, ETH: 3506.02, USDC: 1 };
+const PRICES = { BTC: 66008.36, ETH: 3506.02, USDC: 1, USDT: 1 };
 const MARKET_CACHE = { prices: null, expiresAt: 0 };
 async function currentMarketPrices() {
   if (MARKET_CACHE.prices && Date.now() < MARKET_CACHE.expiresAt)
