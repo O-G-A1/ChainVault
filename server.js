@@ -166,6 +166,13 @@ const initializeData = () => {
                 ];
             changed = true;
           }
+          if (Array.isArray(user.assets)) {
+            const computed = normalizeBalance({ ...user, assets: user.assets });
+            if (Math.abs((Number(user.balance) || 0) - computed) >= 0.01) {
+              user.balance = computed;
+              changed = true;
+            }
+          }
         });
         if (changed) await write(data);
       } catch (err) {
@@ -223,6 +230,33 @@ const assetValue = (user) =>
     (total, asset) => total + asset.amount * PRICES[asset.symbol],
     0,
   );
+const normalizeBalance = (user, market = PRICES) => {
+  if (!Array.isArray(user.assets)) return Number(user.balance || 0);
+  const nextBalance = Number(
+    user.assets
+      .reduce(
+        (total, asset) =>
+          total +
+          (Number(asset.amount) || 0) *
+            (market[asset.symbol]?.usd ?? PRICES[asset.symbol] ?? 0),
+        0,
+      )
+      .toFixed(2),
+  );
+  user.balance = nextBalance;
+  return user.balance;
+};
+const syncStoredUserBalances = (data) => {
+  let changed = false;
+  data.users.forEach((user) => {
+    const computed = normalizeBalance({ ...user, assets: user.assets || [] });
+    if (Math.abs((Number(user.balance) || 0) - computed) >= 0.01) {
+      user.balance = computed;
+      changed = true;
+    }
+  });
+  return changed;
+};
 const refreshBalance = (user) => {
   user.balance = Number(assetValue(user).toFixed(2));
 };
@@ -344,18 +378,30 @@ app.post("/api/auth/logout", requireUser, async (req, res) => {
   await write(data);
   res.json({ ok: true });
 });
-const publicUser = ({ password, ...user }) => user;
+const publicUser = ({ password, ...user }) => {
+  const safeUser = { ...user };
+  if (Array.isArray(safeUser.assets)) normalizeBalance(safeUser);
+  return safeUser;
+};
 app.get("/api/me", requireUser, async (req, res) => {
   const data = await read();
   const user = data.users.find((u) => u.id === req.userId);
+  if (user && Array.isArray(user.assets)) {
+    const priorBalance = Number(user.balance || 0);
+    const normalized = normalizeBalance(user);
+    if (Math.abs(priorBalance - normalized) >= 0.01) await write(data);
+  }
   res.json(publicUser(user));
 });
 app.get("/api/market/prices", async (req, res) =>
   res.json(await currentMarketPrices()),
 );
-app.get("/api/admin/users", requireAdmin, async (req, res) =>
-  res.json((await read()).users.map(publicUser)),
-);
+app.get("/api/admin/users", requireAdmin, async (req, res) => {
+  const data = await read();
+  const changed = syncStoredUserBalances(data);
+  if (changed) await write(data);
+  res.json(data.users.map(publicUser));
+});
 app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
   const data = await read();
   const userIndex = data.users.findIndex((user) => user.id === req.params.id);
