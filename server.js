@@ -476,8 +476,9 @@ app.patch("/api/admin/deposits/:id", requireAdmin, async (req, res) => {
   request.status = action === "approve" ? "approved" : "cancelled";
   request.processedAt = new Date().toISOString();
   if (action === "approve") {
-    user.assets.find((asset) => asset.symbol === request.symbol).amount +=
-      request.amount;
+    const asset = user.assets.find((item) => item.symbol === request.symbol);
+    if (asset) asset.amount += request.amount;
+    else user.assets.push({ symbol: request.symbol, amount: request.amount });
     refreshBalance(user);
     Object.assign(transaction, {
       title: `Received ${request.symbol}`,

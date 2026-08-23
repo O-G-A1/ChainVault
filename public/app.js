@@ -362,6 +362,7 @@ async function deleteUser(id) {
   }
 }
 async function logout() {
+  if (!confirm("Are you sure you want to sign out?")) return;
   try {
     await api("/api/auth/logout", { method: "POST" });
   } catch {}
