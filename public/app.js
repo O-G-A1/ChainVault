@@ -11,7 +11,10 @@ const api = async (url, options = {}) => {
       ...options.headers,
     },
   });
-  const data = await response.json();
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json")
+    ? await response.json()
+    : { error: `Server returned ${response.status} instead of JSON.` };
   if (!response.ok) throw new Error(data.error || "Something went wrong.");
   return data;
 };
