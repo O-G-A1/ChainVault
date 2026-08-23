@@ -238,6 +238,14 @@ const refreshBalanceAtMarket = (user, market) => {
 };
 const addTransaction = (user, transaction) =>
   user.transactions.unshift({ id: id(), time: "Just now", ...transaction });
+const ensureAsset = (user, symbol) => {
+  let asset = user.assets.find((item) => item.symbol === symbol);
+  if (!asset) {
+    asset = { symbol, amount: 0 };
+    user.assets.push(asset);
+  }
+  return asset;
+};
 const escapeHtml = (value) =>
   String(value).replace(
     /[&<>'"]/g,
@@ -397,7 +405,7 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
     Number.isFinite(Number(req.body.balance))
   ) {
     const previousBalance = user.balance;
-    const stablecoin = user.assets.find((asset) => asset.symbol === "USDC");
+    const stablecoin = ensureAsset(user, "USDC");
     const otherAssets = user.assets
       .filter((asset) => asset.symbol !== "USDC")
       .reduce((total, asset) => total + asset.amount * PRICES[asset.symbol], 0);
@@ -425,7 +433,7 @@ app.post("/api/admin/users/:id/funds", requireAdmin, async (req, res) => {
   if (!user) return res.status(404).json({ error: "User not found." });
   if (!Number.isFinite(amount) || amount <= 0)
     return res.status(400).json({ error: "Enter a valid amount to add." });
-  const stablecoin = user.assets.find((asset) => asset.symbol === "USDC");
+  const stablecoin = ensureAsset(user, "USDC");
   stablecoin.amount += amount;
   refreshBalance(user);
   addTransaction(user, {
@@ -469,10 +477,14 @@ app.patch("/api/admin/deposits/:id", requireAdmin, async (req, res) => {
       .json({ error: "This deposit request has already been processed." });
   if (!["approve", "cancel"].includes(action))
     return res.status(400).json({ error: "Choose approve or cancel." });
-  const user = data.users.find((item) => item.id === request.userId),
-    transaction = user.transactions.find(
-      (item) => item.requestId === request.id,
-    );
+  const user = data.users.find((item) => item.id === request.userId);
+  if (!user)
+    return res
+      .status(404)
+      .json({ error: "The deposit user's account was not found." });
+  const transaction = user.transactions.find(
+    (item) => item.requestId === request.id,
+  );
   request.status = action === "approve" ? "approved" : "cancelled";
   request.processedAt = new Date().toISOString();
   if (action === "approve") {
@@ -480,19 +492,21 @@ app.patch("/api/admin/deposits/:id", requireAdmin, async (req, res) => {
     if (asset) asset.amount += request.amount;
     else user.assets.push({ symbol: request.symbol, amount: request.amount });
     refreshBalance(user);
-    Object.assign(transaction, {
-      title: `Received ${request.symbol}`,
-      subtitle: "Confirmed on blockchain",
-      status: "completed",
-      time: "Just now",
-    });
+    if (transaction)
+      Object.assign(transaction, {
+        title: `Received ${request.symbol}`,
+        subtitle: "Confirmed on blockchain",
+        status: "completed",
+        time: "Just now",
+      });
   } else
-    Object.assign(transaction, {
-      title: "Deposit cancelled",
-      subtitle: "Cancelled",
-      status: "cancelled",
-      time: "Just now",
-    });
+    transaction &&
+      Object.assign(transaction, {
+        title: "Deposit cancelled",
+        subtitle: "Cancelled",
+        status: "cancelled",
+        time: "Just now",
+      });
   await write(data);
   res.json({ request, user: publicUser(user) });
 });
