@@ -199,6 +199,7 @@ async function currentMarketPrices() {
         usd: data["usd-coin"].usd,
         change: data["usd-coin"].usd_24h_change,
       },
+      USDT: { usd: 1, change: 0 },
       updatedAt: new Date().toISOString(),
       stale: false,
     };
@@ -211,6 +212,7 @@ async function currentMarketPrices() {
       BTC: { usd: PRICES.BTC, change: 0 },
       ETH: { usd: PRICES.ETH, change: 0 },
       USDC: { usd: 1, change: 0 },
+      USDT: { usd: 1, change: 0 },
       updatedAt: new Date().toISOString(),
       stale: true,
     };

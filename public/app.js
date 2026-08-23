@@ -32,12 +32,14 @@ let livePrices = {
   BTC: { usd: 66008.36, change: 0 },
   ETH: { usd: 3506.02, change: 0 },
   USDC: { usd: 1, change: 0 },
+  USDT: { usd: 1, change: 0 },
 };
 let priceTimer = null;
 const meta = {
   BTC: ["₿", "Bitcoin", ""],
   ETH: ["◆", "Ethereum", "eth"],
   USDC: ["$", "USD Coin", "usdc"],
+  USDT: ["₮", "Tether", "usdc"],
 };
 const receiveAddresses = {
   BTC: ["Bitcoin", "bc1qtndhsmj0p8ka2y4xqtagx0z5vl92vu0mun5kve"],
@@ -110,7 +112,7 @@ function shell(body, tab = "dashboard") {
 function assetRows() {
   return me.assets
     .map((asset) => {
-      const [icon, name, cls] = meta[asset.symbol];
+      const [icon, name, cls] = meta[asset.symbol] || ["•", asset.symbol, ""];
       const market = livePrices[asset.symbol];
       return `<div class="asset"><div class="asset-left"><span class="token ${cls}">${icon}</span><div><b>${name}</b><div class="small live-price" data-symbol="${asset.symbol}">Current value: ${money(market.usd)} · ${market.change.toFixed(2)}% (24h)</div><div class="small">Your balance: ${asset.amount.toLocaleString("en-US", { maximumFractionDigits: 6 })} ${asset.symbol}</div></div></div><b class="holding-value" data-symbol="${asset.symbol}" data-amount="${asset.amount}">${money(asset.amount * market.usd)}</b></div>`;
     })
@@ -153,7 +155,7 @@ function transactionRows(all = false) {
   return (
     txs
       .map((tx) => {
-        const [icon, , cls] = meta[tx.asset];
+        const [icon, , cls] = meta[tx.asset] || ["•", tx.asset, ""];
         const state =
           tx.status === "pending"
             ? '<span class="status off">Pending</span>'
