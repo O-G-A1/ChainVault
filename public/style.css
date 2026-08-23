@@ -537,6 +537,18 @@ nav {
   background: transparent;
   font-size: 22px;
 }
+.confirm-modal {
+  width: min(390px, 100%);
+}
+.confirm-copy {
+  color: var(--muted);
+  margin: 14px 0 22px;
+}
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

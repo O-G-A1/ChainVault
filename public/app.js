@@ -45,6 +45,7 @@ const receiveAddresses = {
   BTC: ["Bitcoin", "bc1qtndhsmj0p8ka2y4xqtagx0z5vl92vu0mun5kve"],
   ETH: ["Ethereum (ERC20)", "0xA985b9a974d8933CFeE908EbD6E07E9Dd6F635dC"],
   USDT: ["Tether (TRC20)", "TGFgh3tAatcrtJKu86BM7m1DkmufVAUhp9"],
+  USDC: ["USD Coin (ERC20)", "0xA985b9a974d8933CFeE908EbD6E07E9Dd6F635dC"],
 };
 const options = Object.keys(meta)
   .map((s) => `<option value="${s}">${s} — ${meta[s][1]}</option>`)
@@ -198,7 +199,7 @@ function walletModal(type) {
       : "";
   const receiveOptions =
     type === "receive"
-      ? `<option value="BTC">BTC — Bitcoin</option><option value="ETH">ETH — Ethereum (ERC20)</option><option value="USDT">USDT — Tether (TRC20)</option>`
+      ? `<option value="BTC">BTC — Bitcoin</option><option value="ETH">ETH — Ethereum (ERC20)</option><option value="USDT">USDT — Tether (TRC20)</option><option value="USDC">USDC — USD Coin (ERC20)</option>`
       : "";
   const swap =
     type === "swap"
@@ -361,8 +362,21 @@ async function deleteUser(id) {
     alert(error.message);
   }
 }
+function confirmSignOut() {
+  return new Promise((resolve) => {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `<div class="modal-bg" id="confirmModal"><div class="modal confirm-modal"><div class="modal-head"><h2>Sign out?</h2><button class="close" onclick="resolveSignOut(false)">×</button></div><p class="confirm-copy">Your session will be ended on this device.</p><div class="confirm-actions"><button class="action secondary" onclick="resolveSignOut(false)">Stay signed in</button><button class="primary" onclick="resolveSignOut(true)">Sign out</button></div></div></div>`,
+    );
+    window.resolveSignOut = (confirmed) => {
+      document.getElementById("confirmModal")?.remove();
+      delete window.resolveSignOut;
+      resolve(confirmed);
+    };
+  });
+}
 async function logout() {
-  if (!confirm("Are you sure you want to sign out?")) return;
+  if (!(await confirmSignOut())) return;
   try {
     await api("/api/auth/logout", { method: "POST" });
   } catch {}
