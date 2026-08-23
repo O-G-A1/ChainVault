@@ -346,6 +346,27 @@ app.get("/api/market/prices", async (req, res) =>
 app.get("/api/admin/users", requireAdmin, async (req, res) =>
   res.json((await read()).users.map(publicUser)),
 );
+app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+  const data = await read();
+  const userIndex = data.users.findIndex((user) => user.id === req.params.id);
+  if (userIndex === -1)
+    return res.status(404).json({ error: "User not found." });
+  if (data.users[userIndex].role === "admin")
+    return res.status(403).json({ error: "Admin accounts cannot be deleted." });
+
+  data.users.splice(userIndex, 1);
+  Object.keys(data.sessions).forEach((token) => {
+    if (data.sessions[token] === req.params.id) delete data.sessions[token];
+  });
+  data.depositRequests = data.depositRequests.filter(
+    (request) => request.userId !== req.params.id,
+  );
+  data.withdrawalRequests = data.withdrawalRequests.filter(
+    (request) => request.userId !== req.params.id,
+  );
+  await write(data);
+  res.json({ ok: true });
+});
 app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
   const data = await read();
   const user = data.users.find((u) => u.id === req.params.id);
