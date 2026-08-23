@@ -94,7 +94,7 @@ async function submitAuth(mode) {
     app.innerHTML = `<section class="auth-shell"><div class="auth-card">${brand}<h1>Welcome back</h1><p>Preparing your dashboard...</p><div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:18px 0 8px;">
       <div class="loading-spinner" aria-label="Loading"></div>
       <div style="font-size:0.96rem;color:#cbd5e1;">Securely signing you in…</div>
-    </div></div></section>`;
+    </div><div id="err"></div></div></section>`;
 
     await new Promise((resolve) => setTimeout(resolve, 5000));
     dashboard();
