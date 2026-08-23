@@ -193,10 +193,40 @@ function walletModal(type) {
     type === "swap"
       ? `<label class="field">FROM ASSET</label><select class="input" id="from">${options}</select><label class="field">TO ASSET</label><select class="input" id="to"><option value="USDC">USDC — USD Coin</option><option value="ETH">ETH — Ethereum</option><option value="BTC">BTC — Bitcoin</option></select>`
       : `<label class="field">ASSET</label><select class="input" id="symbol">${options}</select>`;
+  const receiveAddresses =
+    type === "receive"
+      ? `<div class="receive-addresses"><div class="receive-intro"><span class="eyebrow">Deposit destinations</span><p>Use the matching network when sending funds to your Vault.</p></div>${[
+          ["BTC", "Bitcoin", "bc1qtndhsmj0p8ka2y4xqtagx0z5vl92vu0mun5kve"],
+          [
+            "ETH",
+            "Ethereum (ERC20)",
+            "0xA985b9a974d8933CFeE908EbD6E07E9Dd6F635dC",
+          ],
+          ["USDT", "TRC20", "TGFgh3tAatcrtJKu86BM7m1DkmufVAUhp9"],
+          ["USDT", "ERC20", "0xA985b9a974d8933CFeE908EbD6E07E9Dd6F635dC"],
+        ]
+          .map(
+            ([asset, network, walletAddress]) =>
+              `<div class="receive-address"><div><strong>${asset}</strong><span>${network}</span><code>${walletAddress}</code></div><button class="copy-address" onclick="copyWalletAddress(this, '${walletAddress}')" aria-label="Copy ${asset} ${network} wallet address">Copy</button></div>`,
+          )
+          .join("")}</div>`
+      : "";
   document.body.insertAdjacentHTML(
     "beforeend",
-    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>${titles[type]}</h2><button class="close" onclick="modal.remove()">×</button></div><div id="modalError"></div>${fields}${swap}<label class="field">AMOUNT</label><input class="input" id="amount" type="number" min="0" step="any" placeholder="0.00"><button class="primary wide" onclick="submitWallet('${type}')">${type === "receive" ? "Request deposit approval" : type === "send" ? "Request send" : "Confirm swap"}</button><p class="small" style="margin-top:16px">${type === "receive" ? "Your request will appear in your activity and is credited only after blockchain confirmation." : type === "send" ? "Your balance is not deducted until blockchain confirmation." : "Ensure you verify the details before confirming."}</p></div></div>`,
+    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>${titles[type]}</h2><button class="close" onclick="modal.remove()">×</button></div><div id="modalError"></div>${receiveAddresses}${fields}${swap}<label class="field">AMOUNT</label><input class="input" id="amount" type="number" min="0" step="any" placeholder="0.00"><button class="primary wide" onclick="submitWallet('${type}')">${type === "receive" ? "Request deposit approval" : type === "send" ? "Request send" : "Confirm swap"}</button><p class="small" style="margin-top:16px">${type === "receive" ? "Your request will appear in your activity and is credited only after blockchain confirmation." : type === "send" ? "Your balance is not deducted until blockchain confirmation." : "Ensure you verify the details before confirming."}</p></div></div>`,
   );
+}
+async function copyWalletAddress(button, walletAddress) {
+  try {
+    await navigator.clipboard.writeText(walletAddress);
+    const originalText = button.textContent;
+    button.textContent = "Copied";
+    setTimeout(() => {
+      button.textContent = originalText;
+    }, 1600);
+  } catch {
+    alert("Unable to copy this address. Please select it manually.");
+  }
 }
 async function submitWallet(type) {
   try {
@@ -210,6 +240,17 @@ async function submitWallet(type) {
       method: "POST",
       body: JSON.stringify(body),
     });
+    if (type === "receive") {
+      const confirmButton = document.querySelector(
+        '#modal button[onclick^="submitWallet"]',
+      );
+      if (confirmButton) {
+        confirmButton.disabled = true;
+        confirmButton.innerHTML =
+          '<span class="button-spinner"></span> Confirmed';
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
     modal.remove();
     dashboard();
   } catch (error) {
