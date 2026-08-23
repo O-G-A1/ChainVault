@@ -126,50 +126,58 @@ const INITIAL_DATA = {
   ],
 };
 
-(async () => {
-  try {
-    await ensureInitialData(INITIAL_DATA);
-  } catch (err) {
-    console.error("Initial data setup failed:", err && err.message ? err.message : err);
-    // Do not rethrow — in serverless we prefer the function to remain deployable and
-    // surface this error in logs rather than crash the whole function during init.
+let initialization;
+const initializeData = () => {
+  if (!initialization) {
+    initialization = (async () => {
+      try {
+        await ensureInitialData(INITIAL_DATA);
+        // Upgrade older data without doing storage work while the function module loads.
+        const data = await read();
+        if (!data) return;
+        let changed = false;
+        if (!data.depositRequests) {
+          data.depositRequests = [];
+          changed = true;
+        }
+        if (!data.withdrawalRequests) {
+          data.withdrawalRequests = [];
+          changed = true;
+        }
+        data.users.forEach((user) => {
+          if (user.name === "VaultFlow Admin") {
+            user.name = "OnchainVault Admin";
+            changed = true;
+          }
+          if (!user.assets) {
+            user.assets = user.balance
+              ? [
+                  { symbol: "BTC", amount: 0.183 },
+                  { symbol: "ETH", amount: 2.42 },
+                  {
+                    symbol: "USDC",
+                    amount: Math.max(0, user.balance - 20564.09),
+                  },
+                ]
+              : [
+                  { symbol: "BTC", amount: 0 },
+                  { symbol: "ETH", amount: 0 },
+                  { symbol: "USDC", amount: 0 },
+                ];
+            changed = true;
+          }
+        });
+        if (changed) await write(data);
+      } catch (err) {
+        console.error(
+          "Initial data setup failed:",
+          err && err.message ? err.message : err,
+        );
+      }
+    })();
   }
-})();
-
-// Upgrade older local data files without disturbing existing accounts.
-{
-  const data = await read();
-  let changed = false;
-  if (!data.depositRequests) {
-    data.depositRequests = [];
-    changed = true;
-  }
-  if (!data.withdrawalRequests) {
-    data.withdrawalRequests = [];
-    changed = true;
-  }
-  data.users.forEach((user) => {
-    if (user.name === "VaultFlow Admin") {
-      user.name = "OnchainVault Admin";
-      changed = true;
-    }
-    if (!user.assets) {
-      user.assets = user.balance
-        ? [
-            { symbol: "BTC", amount: 0.183 },
-            { symbol: "ETH", amount: 2.42 },
-            { symbol: "USDC", amount: Math.max(0, user.balance - 20564.09) },
-          ]
-        : [
-            { symbol: "BTC", amount: 0 },
-            { symbol: "ETH", amount: 0 },
-            { symbol: "USDC", amount: 0 },
-          ];
-      changed = true;
-    }
-  });
-  if (changed) await write(data);
-}
+  return initialization;
+};
 
 const PRICES = { BTC: 66008.36, ETH: 3506.02, USDC: 1 };
 const MARKET_CACHE = { prices: null, expiresAt: 0 };
@@ -614,17 +622,20 @@ const moneyValue = (value) =>
 const isMain = import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
   const port = process.env.PORT || 3000;
-  const server = app.listen(port, () => {
-    console.log(`OnchainVault running at http://localhost:${port}`);
-  });
-  server.on("error", (err) => {
-    if (err && err.code === "EADDRINUSE") {
-      console.error(`Port ${port} is already in use`);
-      process.exit(1);
-    } else {
-      throw err;
-    }
+  initializeData().then(() => {
+    const server = app.listen(port, () => {
+      console.log(`OnchainVault running at http://localhost:${port}`);
+    });
+    server.on("error", (err) => {
+      if (err && err.code === "EADDRINUSE") {
+        console.error(`Port ${port} is already in use`);
+        process.exit(1);
+      } else {
+        throw err;
+      }
+    });
   });
 }
 
+export { initializeData };
 export default app;
