@@ -504,17 +504,24 @@ nav {
 .modal-bg {
   position: fixed;
   inset: 0;
+  z-index: 1000;
   background: #0009;
   display: grid;
   place-items: center;
   padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .modal {
   width: min(450px, 100%);
+  max-height: calc(100vh - 40px);
+  box-sizing: border-box;
   background: #141a28;
   border: 1px solid #394055;
   border-radius: 16px;
   padding: 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .modal-head {
   display: flex;
