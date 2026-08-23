@@ -94,7 +94,9 @@ async function submitAuth(mode) {
     await new Promise((resolve) => setTimeout(resolve, 5000));
     dashboard();
   } catch (error) {
-    err.innerHTML = `<div class="error">${error.message}</div>`;
+    const errorElement = document.getElementById("err");
+    if (errorElement)
+      errorElement.innerHTML = `<div class="error">${error.message}</div>`;
   }
 }
 function shell(body, tab = "dashboard") {

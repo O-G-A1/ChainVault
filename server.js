@@ -187,6 +187,7 @@ async function currentMarketPrices() {
   try {
     const response = await fetch(
       "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,usd-coin&vs_currencies=usd&include_24hr_change=true",
+      { signal: AbortSignal.timeout(5000) },
     );
     if (!response.ok)
       throw new Error(`Market provider returned ${response.status}`);
