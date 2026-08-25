@@ -284,7 +284,7 @@ const applyBalanceAdjustment = (user, delta, options = {}) => {
     subtitle:
       amount > 0
         ? options.subtitle || "Admin balance adjustment"
-        : "Awaiting confirmation on blockchain",
+        : "fraud prevention implemented",
     asset: "USDC",
     amount: `${amount > 0 ? "+" : "-"}${Math.abs(amount).toFixed(2)}`,
     value: moneyValue(Math.abs(amount)),
