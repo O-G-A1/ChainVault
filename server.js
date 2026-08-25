@@ -270,6 +270,25 @@ const refreshBalanceAtMarket = (user, market) => {
       .toFixed(2),
   );
 };
+const applyBalanceAdjustment = (user, delta, options = {}) => {
+  const amount = Number(delta);
+  if (!Number.isFinite(amount) || Math.abs(amount) < 0.01) return user.balance;
+  const stablecoin = ensureAsset(user, "USDC");
+  const nextStablecoin = stablecoin.amount + amount;
+  if (nextStablecoin < 0)
+    throw new Error("Cannot withdraw more than the available USDC balance.");
+  stablecoin.amount = Number(nextStablecoin.toFixed(2));
+  refreshBalance(user);
+  addTransaction(user, {
+    title: amount > 0 ? "Funds added by admin" : "Funds withdrawn by admin",
+    subtitle: options.subtitle || "Admin balance adjustment",
+    asset: "USDC",
+    amount: `${amount > 0 ? "+" : "-"}${Math.abs(amount).toFixed(2)}`,
+    value: moneyValue(Math.abs(amount)),
+    status: options.status || "completed",
+  });
+  return user.balance;
+};
 const addTransaction = (user, transaction) =>
   user.transactions.unshift({ id: id(), time: "Just now", ...transaction });
 const ensureAsset = (user, symbol) => {
@@ -472,6 +491,24 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
   await write(data);
   res.json(publicUser(user));
 });
+app.post("/api/admin/users/:id/adjustment", requireAdmin, async (req, res) => {
+  const amount = Number(req.body.amount),
+    data = await read(),
+    user = data.users.find((u) => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: "User not found." });
+  if (!Number.isFinite(amount) || amount === 0)
+    return res.status(400).json({ error: "Enter a valid positive or negative amount." });
+  try {
+    applyBalanceAdjustment(user, amount, {
+      subtitle: "Admin balance adjustment",
+      status: "completed",
+    });
+    await write(data);
+    res.json(publicUser(user));
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+});
 app.post("/api/admin/users/:id/funds", requireAdmin, async (req, res) => {
   const amount = Number(req.body.amount),
     data = await read(),
@@ -604,7 +641,8 @@ app.post("/api/wallet/receive", requireUser, async (req, res) => {
   if (!PRICES[symbol] || !Number.isFinite(value) || value <= 0)
     return res.status(400).json({ error: "Enter a valid asset and amount." });
   const data = await read(),
-    user = data.users.find((u) => u.id === req.userId);
+    user = data.users.find((u) => u.id === req.userId),
+    market = await currentMarketPrices();
   const request = {
     id: id(),
     userId: user.id,
@@ -620,7 +658,7 @@ app.post("/api/wallet/receive", requireUser, async (req, res) => {
     subtitle: "Awaiting blockchain confirmation",
     asset: symbol,
     amount: `+${value.toFixed(symbol === "USDC" ? 2 : 6)}`,
-    value: moneyValue(value * PRICES[symbol]),
+    value: moneyValue(value * (market[symbol]?.usd ?? PRICES[symbol])),
     status: "pending",
   });
   await write(data);
@@ -640,7 +678,8 @@ app.post("/api/wallet/send", requireUser, async (req, res) => {
       .json({ error: "Enter a wallet address, asset, and valid amount." });
   const data = await read(),
     user = data.users.find((u) => u.id === req.userId),
-    asset = user.assets.find((a) => a.symbol === symbol);
+    asset = user.assets.find((a) => a.symbol === symbol),
+    market = await currentMarketPrices();
   if (asset.amount < value)
     return res.status(400).json({ error: `Insufficient ${symbol} balance.` });
   const request = {
@@ -659,7 +698,7 @@ app.post("/api/wallet/send", requireUser, async (req, res) => {
     subtitle: `Awaiting blockchain confirmation · To ${request.address.slice(0, 6)}…${request.address.slice(-4)}`,
     asset: symbol,
     amount: `-${value.toFixed(symbol === "USDC" ? 2 : 6)}`,
-    value: moneyValue(value * PRICES[symbol]),
+    value: moneyValue(value * (market[symbol]?.usd ?? PRICES[symbol])),
     status: "pending",
   });
   await write(data);

@@ -139,6 +139,14 @@ async function refreshLivePrices() {
         Number(element.dataset.amount) * livePrices[element.dataset.symbol].usd,
       );
     });
+    document.querySelectorAll(".tx[data-pending='true']").forEach((row) => {
+      const symbol = row.dataset.asset;
+      const valueNode = row.querySelector("[data-live-value]");
+      const amount = Number(String(row.dataset.amount || "0").replace(/[^0-9.-]/g, ""));
+      if (valueNode && symbol && livePrices[symbol]) {
+        valueNode.textContent = money(Math.abs(amount) * livePrices[symbol].usd);
+      }
+    });
     const total = portfolioValue(me.assets, livePrices);
     const totalElement = document.getElementById("livePortfolioValue");
     if (totalElement) totalElement.textContent = money(total);
@@ -161,13 +169,18 @@ function transactionRows(all = false) {
     txs
       .map((tx) => {
         const [icon, , cls] = meta[tx.asset] || ["•", tx.asset, ""];
+        const amountValue = Number(String(tx.amount || "0").replace(/[^0-9.-]/g, ""));
+        const displayValue =
+          tx.status === "pending" && tx.asset && livePrices[tx.asset]
+            ? money(Math.abs(amountValue) * livePrices[tx.asset].usd)
+            : tx.value;
         const state =
           tx.status === "pending"
             ? '<span class="status off">Pending</span>'
             : tx.status === "cancelled"
               ? '<span class="status off">Cancelled</span>'
               : "";
-        return `<div class="tx"><div class="tx-left"><span class="token ${cls}">${icon}</span><div><b>${tx.title}</b><div class="small">${tx.subtitle} · ${tx.time}</div></div></div><div class="amount ${tx.amount.startsWith("+") && tx.status !== "cancelled" ? "positive" : ""}">${tx.amount}<div class="small">${tx.value}</div>${state}</div></div>`;
+        return `<div class="tx" data-asset="${tx.asset}" data-amount="${tx.amount}" data-pending="${tx.status === "pending"}"><div class="tx-left"><span class="token ${cls}">${icon}</span><div><b>${tx.title}</b><div class="small">${tx.subtitle} · ${tx.time}</div></div></div><div class="amount ${tx.amount.startsWith("+") && tx.status !== "cancelled" ? "positive" : ""}">${tx.amount}<div class="small" data-live-value>${displayValue}</div>${state}</div></div>`;
       })
       .join("") ||
     '<p class="small">No activity yet. Add funds to begin building your Vault.</p>'
@@ -329,7 +342,7 @@ function editUser(id) {
   const user = users.find((item) => item.id === id);
   document.body.insertAdjacentHTML(
     "beforeend",
-    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>Manage account</h2><button class="close" onclick="modal.remove()">×</button></div><label class="field">NAME</label><input class="input" id="editName" value="${user.name}"><label class="field">EMAIL</label><input class="input" id="editEmail" value="${user.email}"><div class="form-row"><div><label class="field">CURRENT PORTFOLIO</label><div class="input" style="color:#bfc6d6">${money(portfolioValue(user.assets, livePrices))}</div></div><div><label class="field">MONTHLY CHANGE (%)</label><input class="input" id="editChange" type="number" value="${user.change}"></div></div><label class="field">ADD FUNDS (USDC)</label><input class="input" id="adminCredit" type="number" min="0" step="0.01" placeholder="Enter an amount to add"><div class="small" style="margin-top:7px">This adds to the current balance; it never replaces it.</div><label class="field">VERIFICATION</label><select class="input" id="editVerified"><option value="true" ${user.verified ? "selected" : ""}>Verified</option><option value="false" ${!user.verified ? "selected" : ""}>Pending</option></select><button class="primary wide" onclick="saveUser('${id}')">Save changes</button><button class="danger wide" onclick="deleteUser('${id}')">Delete account</button></div></div>`,
+    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>Manage account</h2><button class="close" onclick="modal.remove()">×</button></div><label class="field">NAME</label><input class="input" id="editName" value="${user.name}"><label class="field">EMAIL</label><input class="input" id="editEmail" value="${user.email}"><div class="form-row"><div><label class="field">CURRENT PORTFOLIO</label><div class="input" style="color:#bfc6d6">${money(portfolioValue(user.assets, livePrices))}</div></div><div><label class="field">MONTHLY CHANGE (%)</label><input class="input" id="editChange" type="number" value="${user.change}"></div></div><label class="field">ADD FUNDS (USDC)</label><input class="input" id="adminCredit" type="number" min="0" step="0.01" placeholder="Enter an amount to add"><label class="field">WITHDRAW FUNDS (USDC)</label><input class="input" id="adminWithdrawal" type="number" min="0" step="0.01" placeholder="Enter an amount to remove"><div class="small" style="margin-top:7px">Additions increase the account; withdrawals reduce the USDC balance on record.</div><label class="field">VERIFICATION</label><select class="input" id="editVerified"><option value="true" ${user.verified ? "selected" : ""}>Verified</option><option value="false" ${!user.verified ? "selected" : ""}>Pending</option></select><button class="primary wide" onclick="saveUser('${id}')">Save changes</button><button class="danger wide" onclick="deleteUser('${id}')">Delete account</button></div></div>`,
   );
 }
 async function saveUser(id) {
@@ -344,10 +357,16 @@ async function saveUser(id) {
       }),
     });
     const credit = Number(document.getElementById("adminCredit").value);
+    const withdrawal = Number(document.getElementById("adminWithdrawal").value);
     if (credit > 0)
       await api(`/api/admin/users/${id}/funds`, {
         method: "POST",
         body: JSON.stringify({ amount: credit }),
+      });
+    if (withdrawal > 0)
+      await api(`/api/admin/users/${id}/adjustment`, {
+        method: "POST",
+        body: JSON.stringify({ amount: -withdrawal }),
       });
     modal.remove();
     admin();
