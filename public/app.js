@@ -231,6 +231,22 @@ function walletModal(type) {
     `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>${titles[type]}</h2><button class="close" onclick="modal.remove()">×</button></div><div id="modalError"></div>${fields}${swap}${receivePanel}<label class="field">AMOUNT</label><input class="input" id="amount" type="number" min="0" step="any" placeholder="0.00"><button class="primary wide" onclick="submitWallet('${type}')">${type === "receive" ? "Request deposit approval" : type === "send" ? "Request send" : "Confirm swap"}</button><p class="small" style="margin-top:16px">${type === "receive" ? "Your request will appear in your activity and is credited only after blockchain confirmation." : type === "send" ? "Your balance is not deducted until blockchain confirmation." : "Ensure you verify the details before confirming."}</p></div></div>`,
   );
   if (type === "receive") updateReceiveAddress("BTC");
+  if (type === "send") {
+    const sendButton = document.querySelector('#modal button[onclick^="submitWallet"]');
+    const addressInput = document.getElementById("address");
+    const updateSendButtonState = () => {
+      const hasAddress = !!addressInput.value.trim();
+      if (sendButton) {
+        sendButton.disabled = !hasAddress;
+        sendButton.style.opacity = hasAddress ? "1" : "0.55";
+        sendButton.style.cursor = hasAddress ? "pointer" : "not-allowed";
+      }
+    };
+    if (addressInput && sendButton) {
+      updateSendButtonState();
+      addressInput.addEventListener("input", updateSendButtonState);
+    }
+  }
 }
 function updateReceiveAddress(symbol) {
   const panel = document.getElementById("receiveAddressPanel");
@@ -254,6 +270,14 @@ async function copyWalletAddress(button, walletAddress) {
 }
 async function submitWallet(type) {
   try {
+    if (type === "send") {
+      const recipient = document.getElementById("address");
+      if (!recipient || !recipient.value.trim()) {
+        modalError.innerHTML =
+          '<div class="error">Please include a recipient address before requesting a send.</div>';
+        return;
+      }
+    }
     const body = { amount: amount.value };
     if (type === "swap") {
       body.from = from.value;
