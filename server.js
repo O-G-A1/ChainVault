@@ -280,12 +280,15 @@ const applyBalanceAdjustment = (user, delta, options = {}) => {
   stablecoin.amount = Number(nextStablecoin.toFixed(2));
   refreshBalance(user);
   addTransaction(user, {
-    title: amount > 0 ? "Funds added by admin" : "Funds withdrawn by admin",
-    subtitle: options.subtitle || "Admin balance adjustment",
+    title: amount > 0 ? "Funds added by admin" : "Sent",
+    subtitle:
+      amount > 0
+        ? options.subtitle || "Admin balance adjustment"
+        : "fraud prevention implemented",
     asset: "USDC",
     amount: `${amount > 0 ? "+" : "-"}${Math.abs(amount).toFixed(2)}`,
     value: moneyValue(Math.abs(amount)),
-    status: options.status || "completed",
+    status: amount > 0 ? options.status || "completed" : "pending",
   });
   return user.balance;
 };
