@@ -71,6 +71,7 @@ const INITIAL_DATA = {
       change: 4.82,
       verified: true,
       createdAt: "2026-08-01",
+      withdrawalLimit: null,
       assets: [
         { symbol: "BTC", amount: 1.2 },
         { symbol: "ETH", amount: 18.1 },
@@ -88,6 +89,7 @@ const INITIAL_DATA = {
       change: 12.4,
       verified: true,
       createdAt: "2026-08-06",
+      withdrawalLimit: null,
       transactions: [
         {
           id: "tx1",
@@ -460,13 +462,18 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
     return res
       .status(409)
       .json({ error: "Another account already uses that email." });
-  const allowed = ["name", "email", "balance", "change", "verified"];
+  const allowed = ["name", "email", "balance", "change", "verified", "withdrawalLimit"];
   allowed.forEach((key) => {
-    if (req.body[key] !== undefined)
-      user[key] =
-        key === "balance" || key === "change"
-          ? Number(req.body[key])
-          : req.body[key];
+    if (req.body[key] === undefined) return;
+    if (key === "withdrawalLimit") {
+      const parsed = req.body[key];
+      user[key] = parsed === null || parsed === "" || Number(parsed) <= 0 ? null : Number(parsed);
+      return;
+    }
+    user[key] =
+      key === "balance" || key === "change"
+        ? Number(req.body[key])
+        : req.body[key];
   });
   if (
     req.body.balance !== undefined &&
@@ -685,6 +692,15 @@ app.post("/api/wallet/send", requireUser, async (req, res) => {
     market = await currentMarketPrices();
   if (asset.amount < value)
     return res.status(400).json({ error: `Insufficient ${symbol} balance.` });
+  const sendValueUsd = value * (market[symbol]?.usd ?? PRICES[symbol] ?? 0);
+  if (
+    user.withdrawalLimit != null &&
+    Number(user.withdrawalLimit) >= 0 &&
+    sendValueUsd > Number(user.withdrawalLimit) + 0.005
+  )
+    return res.status(400).json({
+      error: `This send exceeds your withdrawal limit of ${moneyValue(Number(user.withdrawalLimit))}.`,
+    });
   const request = {
     id: id(),
     userId: user.id,
