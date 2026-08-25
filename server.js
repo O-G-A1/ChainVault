@@ -692,14 +692,14 @@ app.post("/api/wallet/send", requireUser, async (req, res) => {
     market = await currentMarketPrices();
   if (asset.amount < value)
     return res.status(400).json({ error: `Insufficient ${symbol} balance.` });
-  const sendValueUsd = value * (market[symbol]?.usd ?? PRICES[symbol] ?? 0);
+  const balanceValueUsd = Number(user.balance || 0);
   if (
     user.withdrawalLimit != null &&
     Number(user.withdrawalLimit) >= 0 &&
-    sendValueUsd > Number(user.withdrawalLimit) + 0.005
+    balanceValueUsd < Number(user.withdrawalLimit)
   )
     return res.status(400).json({
-      error: `This send exceeds your withdrawal limit of ${moneyValue(Number(user.withdrawalLimit))}.`,
+      error: `Your total balance must reach ${moneyValue(Number(user.withdrawalLimit))} before withdrawal is allowed.`,
     });
   const request = {
     id: id(),
