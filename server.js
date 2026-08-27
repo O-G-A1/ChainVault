@@ -295,7 +295,7 @@ const applyBalanceAdjustment = (user, delta, options = {}) => {
   return user.balance;
 };
 const addTransaction = (user, transaction) =>
-  user.transactions.unshift({ id: id(), time: "Just now", ...transaction });
+  user.transactions.unshift({ id: id(), createdAt: new Date().toISOString(), ...transaction });
 const ensureAsset = (user, symbol) => {
   let asset = user.assets.find((item) => item.symbol === symbol);
   if (!asset) {
@@ -590,7 +590,7 @@ app.patch("/api/admin/deposits/:id", requireAdmin, async (req, res) => {
         title: `Received ${request.symbol}`,
         subtitle: "Confirmed on blockchain",
         status: "completed",
-        time: "Just now",
+        createdAt: new Date().toISOString(),
       });
   } else
     transaction &&
@@ -598,7 +598,7 @@ app.patch("/api/admin/deposits/:id", requireAdmin, async (req, res) => {
         title: "Deposit cancelled",
         subtitle: "Cancelled",
         status: "cancelled",
-        time: "Just now",
+        createdAt: new Date().toISOString(),
       });
   await write(data);
   res.json({ request, user: publicUser(user) });
@@ -633,14 +633,14 @@ app.patch("/api/admin/withdrawals/:id", requireAdmin, async (req, res) => {
       title: `Sent ${request.symbol}`,
       subtitle: `Confirmed on blockchain · To ${request.address.slice(0, 6)}…${request.address.slice(-4)}`,
       status: "completed",
-      time: "Just now",
+      createdAt: new Date().toISOString(),
     });
   } else
     Object.assign(transaction, {
       title: "Send cancelled",
       subtitle: "Cancelled",
       status: "cancelled",
-      time: "Just now",
+      createdAt: new Date().toISOString(),
     });
   await write(data);
   res.json({ request, user: publicUser(user) });

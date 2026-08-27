@@ -142,9 +142,13 @@ async function refreshLivePrices() {
     document.querySelectorAll(".tx[data-pending='true']").forEach((row) => {
       const symbol = row.dataset.asset;
       const valueNode = row.querySelector("[data-live-value]");
-      const amount = Number(String(row.dataset.amount || "0").replace(/[^0-9.-]/g, ""));
+      const amount = Number(
+        String(row.dataset.amount || "0").replace(/[^0-9.-]/g, ""),
+      );
       if (valueNode && symbol && livePrices[symbol]) {
-        valueNode.textContent = money(Math.abs(amount) * livePrices[symbol].usd);
+        valueNode.textContent = money(
+          Math.abs(amount) * livePrices[symbol].usd,
+        );
       }
     });
     const total = portfolioValue(me.assets, livePrices);
@@ -169,23 +173,69 @@ function transactionRows(all = false) {
     txs
       .map((tx) => {
         const [icon, , cls] = meta[tx.asset] || ["•", tx.asset, ""];
-        const amountValue = Number(String(tx.amount || "0").replace(/[^0-9.-]/g, ""));
+        const amountValue = Number(
+          String(tx.amount || "0").replace(/[^0-9.-]/g, ""),
+        );
         const displayValue =
           tx.status === "pending" && tx.asset && livePrices[tx.asset]
             ? money(Math.abs(amountValue) * livePrices[tx.asset].usd)
             : tx.value;
+
         const state =
           tx.status === "pending"
             ? '<span class="status off">Pending</span>'
             : tx.status === "cancelled"
               ? '<span class="status off">Cancelled</span>'
               : "";
-        return `<div class="tx" data-asset="${tx.asset}" data-amount="${tx.amount}" data-pending="${tx.status === "pending"}"><div class="tx-left"><span class="token ${cls}">${icon}</span><div><b>${tx.title}</b><div class="small">${tx.subtitle} · ${tx.time}</div></div></div><div class="amount ${tx.amount.startsWith("+") && tx.status !== "cancelled" ? "positive" : ""}">${tx.amount}<div class="small" data-live-value>${displayValue}</div>${state}</div></div>`;
+
+        const when = tx.createdAt
+          ? `<span data-timeago="${tx.createdAt}">${timeAgo(tx.createdAt)}</span>`
+          : tx.time;
+
+        return `<div class="tx" data-asset="${tx.asset}" data-amount="${tx.amount}" data-pending="${tx.status === "pending"}"><div class="tx-left"><span class="token ${cls}">${icon}</span><div><b>${tx.title}</b><div class="small">${tx.subtitle} · ${when}</div></div></div><div class="amount ${tx.amount.startsWith("+") && tx.status !== "cancelled" ? "positive" : ""}">${tx.amount}<div class="small" data-live-value>${displayValue}</div>${state}</div></div>`;
       })
       .join("") ||
     '<p class="small">No activity yet. Add funds to begin building your Vault.</p>'
   );
 }
+function timeAgo(iso) {
+  if (!iso) return "";
+  const then = new Date(iso);
+  if (isNaN(then)) return "";
+  const now = new Date();
+  const diff = Math.floor((now - then) / 1000);
+  const fmt = (d) =>
+    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (diff < 60) return "Just now";
+  if (diff < 3600) {
+    const m = Math.floor(diff / 60);
+    return `${m} min${m === 1 ? "" : "s"} ago`;
+  }
+  if (diff < 86400) {
+    const h = Math.floor(diff / 3600);
+    return `${h} hour${h === 1 ? "" : "s"} ago`;
+  }
+  const days = Math.floor(
+    (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+      Date.UTC(then.getFullYear(), then.getMonth(), then.getDate())) /
+      86400000,
+  );
+  if (days === 0) return `Today, ${fmt(then)}`;
+  if (days === 1) return `Yesterday, ${fmt(then)}`;
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return `${then.toLocaleDateString([], { month: "short", day: "numeric" })}, ${fmt(then)}`;
+}
+function refreshTimeLabels() {
+  document.querySelectorAll("[data-timeago]").forEach((el) => {
+    const iso = el.dataset.timeago;
+    el.textContent = iso ? timeAgo(iso) : "";
+  });
+}
+function startTimeRefresh() {
+  refreshTimeLabels();
+  if (!timeTimer) timeTimer = setInterval(refreshTimeLabels, 30_000);
+}
+let timeTimer = null;
 function timeGreeting() {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
@@ -197,12 +247,14 @@ function dashboard() {
     `<header class="topbar"><div><h1>${timeGreeting()}, ${me.name.split(" ")[0]}.</h1><p>Here’s how your Vault is doing today.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header><div class="grid"><div><div class="card balance-card"><div class="balance-label">Total Vault value</div><div class="balance" id="livePortfolioValue">${money(portfolioValue(me.assets, livePrices))}</div><span class="gain">↗ ${me.change}% this month</span><div class="actions"><button class="action" onclick="walletModal('receive')">↓ Receive</button><button class="action secondary" onclick="walletModal('send')">↑ Send</button><button class="action secondary" onclick="walletModal('swap')">⇄ Swap</button></div></div><div class="card" style="margin-top:18px"><h3>Your assets</h3><div class="small" id="marketUpdated">Loading live market prices…</div>${assetRows()}</div></div><div class="card"><h3>Recent activity</h3>${transactionRows()}<div class="switch" style="text-align:left"><span class="link" onclick="activity()">View all activity →</span></div></div></div>`,
   );
   startPriceRefresh();
+  startTimeRefresh();
 }
 function activity() {
   shell(
     `<header class="topbar"><div><h1>Account activity</h1><p>Your activity will appear here.</p></div><button class="primary" onclick="walletModal('receive')">Add funds</button></header><div class="card"><h3>Transaction history</h3>${transactionRows(true)}</div>`,
     "activity",
   );
+  startTimeRefresh();
 }
 function walletModal(type) {
   const titles = {
@@ -232,7 +284,9 @@ function walletModal(type) {
   );
   if (type === "receive") updateReceiveAddress("BTC");
   if (type === "send") {
-    const sendButton = document.querySelector('#modal button[onclick^="submitWallet"]');
+    const sendButton = document.querySelector(
+      '#modal button[onclick^="submitWallet"]',
+    );
     const addressInput = document.getElementById("address");
     const updateSendButtonState = () => {
       const hasAddress = !!addressInput.value.trim();
