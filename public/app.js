@@ -74,13 +74,21 @@ async function loadLandingMarkets() {
   }
 }
 function auth(mode) {
-  app.innerHTML = `<section class="auth-shell"><div class="auth-card">${brand}<h1>${mode === "login" ? "Welcome back" : "Create your Vault"}</h1><p>${mode === "login" ? "Sign in to access your Vault." : "Start managing your digital assets today."}</p><div id="err"></div>${mode === "signup" ? '<label class="field">FULL NAME</label><input class="input" id="name" placeholder="Your name">' : ""}<label class="field">EMAIL ADDRESS</label><input class="input" id="email" type="email" placeholder="you@example.com"><label class="field">PASSWORD</label><input class="input" id="password" type="password" placeholder="At least 8 characters"><button class="primary wide" onclick="submitAuth('${mode}')">${mode === "login" ? "Sign in" : "Create account"}</button><div class="switch">${mode === "login" ? 'New to OnchainVault? <span class="link" onclick="auth(\'signup\')">Create an account</span>' : 'Already have an account? <span class="link" onclick="auth(\'login\')">Sign in</span>'}</div>${mode === "login" ? '<div class="demo">Private access · Admin-reviewed accounts</div>' : ""}</div></section>`;
+  app.innerHTML = `<section class="auth-shell"><div class="auth-card">${brand}<h1>${mode === "login" ? "Welcome back" : "Create your Vault"}</h1><p>${mode === "login" ? "Sign in to access your Vault." : "Start managing your digital assets today."}</p><div id="err"></div>${mode === "signup" ? '<label class="field">FULL NAME</label><input class="input" id="name" placeholder="Your name">' : ""}<label class="field">EMAIL ADDRESS</label><input class="input" id="email" type="email" placeholder="you@example.com"><label class="field">PASSWORD</label><input class="input" id="password" type="password" placeholder="At least 8 characters">${mode === "signup" ? '<label class="field">CONFIRM PASSWORD</label><input class="input" id="confirmPassword" type="password" placeholder="Type your password again" autocomplete="new-password">' : ""}<button class="primary wide" onclick="submitAuth('${mode}')">${mode === "login" ? "Sign in" : "Create account"}</button><div class="switch">${mode === "login" ? 'New to OnchainVault? <span class="link" onclick="auth(\'signup\')">Create an account</span>' : 'Already have an account? <span class="link" onclick="auth(\'login\')">Sign in</span>'}</div>${mode === "login" ? '<div class="demo">Private access · Admin-reviewed accounts</div>' : ""}</div></section>`;
 }
 async function submitAuth(mode) {
   try {
     const emailInput = document.getElementById("email");
     const passwordInput = document.getElementById("password");
     const nameInput = document.getElementById("name");
+    if (mode === "signup") {
+      const confirmPasswordInput = document.getElementById("confirmPassword");
+      if (passwordInput.value !== confirmPasswordInput.value) {
+        document.getElementById("err").innerHTML =
+          '<div class="error">Passwords do not match. Please re-enter them.</div>';
+        return;
+      }
+    }
     const body = {
       email: emailInput.value.trim(),
       password: passwordInput.value,
@@ -323,6 +331,9 @@ async function copyWalletAddress(button, walletAddress) {
   }
 }
 async function submitWallet(type) {
+  const confirmButton = document.querySelector(
+    '#modal button[onclick^="submitWallet"]',
+  );
   try {
     if (type === "send") {
       const recipient = document.getElementById("address");
@@ -336,16 +347,21 @@ async function submitWallet(type) {
     if (type === "swap") {
       body.from = from.value;
       body.to = to.value;
+      if (confirmButton) {
+        confirmButton.disabled = true;
+        confirmButton.innerHTML = '<span class="button-spinner"></span> Swapping…';
+      }
     } else body.symbol = symbol.value;
     if (type === "send") body.address = address.value;
     me = await api(`/api/wallet/${type}`, {
       method: "POST",
       body: JSON.stringify(body),
     });
+    if (type === "swap" && confirmButton) {
+      confirmButton.innerHTML = "✓ Swapped";
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    }
     if (type === "receive") {
-      const confirmButton = document.querySelector(
-        '#modal button[onclick^="submitWallet"]',
-      );
       if (confirmButton) {
         confirmButton.disabled = true;
         confirmButton.innerHTML =
@@ -356,6 +372,10 @@ async function submitWallet(type) {
     modal.remove();
     dashboard();
   } catch (error) {
+    if (type === "swap" && confirmButton) {
+      confirmButton.disabled = false;
+      confirmButton.textContent = "Confirm swap";
+    }
     modalError.innerHTML = `<div class="error">${error.message}</div>`;
   }
 }
