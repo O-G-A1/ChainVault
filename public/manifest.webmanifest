@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "OnchainVault",
+  "short_name": "OnchainVault",
+  "description": "Digital assets, simplified.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070a12",
+  "theme_color": "#070a12",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
