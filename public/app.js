@@ -2,6 +2,48 @@ const app = document.querySelector("#app");
 let token = localStorage.getItem("vf_token"),
   me = null,
   users = [];
+const SESSION_IDLE_MS = 60 * 60 * 1000;
+const LAST_ACTIVITY_KEY = "vf_last_activity";
+let lastHeartbeatAt = 0;
+function clearLocalSession() {
+  localStorage.removeItem("vf_token");
+  localStorage.removeItem(LAST_ACTIVITY_KEY);
+  token = null;
+  me = null;
+}
+function checkIdleSession() {
+  if (!token) return false;
+  const lastActivityAt = Number(localStorage.getItem(LAST_ACTIVITY_KEY));
+  if (!lastActivityAt || Date.now() - lastActivityAt >= SESSION_IDLE_MS) {
+    clearLocalSession();
+    landing();
+    return true;
+  }
+  return false;
+}
+function recordActivity() {
+  if (!token || checkIdleSession()) return;
+  localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+  if (Date.now() - lastHeartbeatAt < 60_000) return;
+  lastHeartbeatAt = Date.now();
+  fetch("/api/auth/heartbeat", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  }).then((response) => {
+    if (response.status === 401 && token) {
+      clearLocalSession();
+      landing();
+    }
+  }).catch(() => {});
+}
+for (const eventName of ["pointerdown", "keydown", "touchstart", "scroll"]) {
+  window.addEventListener(eventName, recordActivity, { passive: true });
+}
+window.addEventListener("focus", checkIdleSession);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") checkIdleSession();
+});
+window.setInterval(checkIdleSession, 15_000);
 const api = async (url, options = {}) => {
   const response = await fetch(url, {
     ...options,
@@ -18,6 +60,50 @@ const api = async (url, options = {}) => {
   if (!response.ok) throw new Error(data.error || "Something went wrong.");
   return data;
 };
+function inAppDialog({ title, message, confirmLabel = "OK", cancelLabel }) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-bg device-dialog-bg";
+    backdrop.innerHTML = `<section class="modal confirm-modal device-dialog" role="alertdialog" aria-modal="true" aria-labelledby="deviceDialogTitle" aria-describedby="deviceDialogMessage"><div class="modal-head"><h2 id="deviceDialogTitle"></h2>${cancelLabel ? '<button class="close" type="button" aria-label="Close">×</button>' : ""}</div><p class="confirm-copy" id="deviceDialogMessage"></p><div class="confirm-actions">${cancelLabel ? '<button class="action secondary device-dialog-cancel" type="button"></button>' : ""}<button class="${cancelLabel ? "danger" : "primary"} device-dialog-confirm" type="button"></button></div></section>`;
+    backdrop.querySelector("h2").textContent = title;
+    backdrop.querySelector("#deviceDialogMessage").textContent = message;
+    backdrop.querySelector(".device-dialog-confirm").textContent = confirmLabel;
+    if (cancelLabel)
+      backdrop.querySelector(".device-dialog-cancel").textContent = cancelLabel;
+    document.body.append(backdrop);
+
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("keydown", onKeyDown);
+      backdrop.remove();
+      resolve(result);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") finish(false);
+    };
+    backdrop.querySelector(".device-dialog-confirm").addEventListener("click", () => finish(true));
+    backdrop.querySelector(".device-dialog-cancel")?.addEventListener("click", () => finish(false));
+    backdrop.querySelector(".close")?.addEventListener("click", () => finish(false));
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) finish(false);
+    });
+    document.addEventListener("keydown", onKeyDown);
+    backdrop.querySelector(cancelLabel ? ".device-dialog-cancel" : ".device-dialog-confirm").focus();
+  });
+}
+function showNotice(message, title = "Please try again") {
+  return inAppDialog({ title, message });
+}
+function confirmInApp(message, title = "Please confirm") {
+  return inAppDialog({
+    title,
+    message,
+    confirmLabel: "Delete account",
+    cancelLabel: "Keep account",
+  });
+}
 const money = (n) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
     n || 0,
@@ -100,6 +186,8 @@ async function submitAuth(mode) {
     );
     token = data.token;
     localStorage.setItem("vf_token", token);
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+    lastHeartbeatAt = Date.now();
     me = data.user;
 
     app.innerHTML = `<section class="auth-shell"><div class="auth-card">${brand}<h1>Welcome back</h1><p>Preparing your dashboard...</p><div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:18px 0 8px;">
@@ -327,7 +415,7 @@ async function copyWalletAddress(button, walletAddress) {
       button.textContent = originalText;
     }, 1600);
   } catch {
-    alert("Unable to copy this address. Please select it manually.");
+    showNotice("Unable to copy this address. Please select it manually.", "Copy unavailable");
   }
 }
 async function submitWallet(type) {
@@ -416,7 +504,7 @@ async function processDeposit(id, action) {
     });
     admin();
   } catch (error) {
-    alert(error.message);
+    showNotice(error.message);
   }
 }
 function pendingWithdrawals(withdrawals) {
@@ -433,7 +521,7 @@ async function processWithdrawal(id, action) {
     });
     admin();
   } catch (error) {
-    alert(error.message);
+    showNotice(error.message);
   }
 }
 function editUser(id) {
@@ -471,18 +559,18 @@ async function saveUser(id) {
     modal.remove();
     admin();
   } catch (error) {
-    alert(error.message);
+    showNotice(error.message);
   }
 }
 async function deleteUser(id) {
   const user = users.find((item) => item.id === id);
-  if (!user || !confirm(`Delete ${user.name}'s account permanently?`)) return;
+  if (!user || !(await confirmInApp(`Delete ${user.name}'s account permanently?`, "Delete account?"))) return;
   try {
     await api(`/api/admin/users/${id}`, { method: "DELETE" });
     modal.remove();
     admin();
   } catch (error) {
-    alert(error.message);
+    showNotice(error.message);
   }
 }
 function confirmSignOut() {
@@ -503,19 +591,17 @@ async function logout() {
   try {
     await api("/api/auth/logout", { method: "POST" });
   } catch {}
-  localStorage.removeItem("vf_token");
-  token = null;
-  me = null;
+  clearLocalSession();
   landing();
 }
 async function boot() {
   if (!token) return landing();
+  if (checkIdleSession()) return;
   try {
     me = await api("/api/me");
     dashboard();
   } catch {
-    localStorage.removeItem("vf_token");
-    token = null;
+    clearLocalSession();
     landing();
   }
 }

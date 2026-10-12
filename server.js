@@ -15,6 +15,7 @@ const DATA_FILE = path.join(__dirname, "data.json");
 const EMAIL_TO = process.env.EMAIL_TO || "paymentintel@gmail.com";
 const EMAIL_FROM = process.env.EMAIL_FROM;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const SESSION_IDLE_MS = 60 * 60 * 1000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -37,7 +38,23 @@ const id = () => crypto.randomBytes(18).toString("hex");
 const sessionUser = async (req) => {
   const token = (req.headers.authorization || "").replace("Bearer ", "");
   const data = await read();
-  return data.sessions[token];
+  const session = data.sessions[token];
+  if (!session) return null;
+
+  // Migrate existing string sessions and expire sessions after one hour idle.
+  const userId = typeof session === "string" ? session : session.userId;
+  const lastActivityAt =
+    typeof session === "string" ? Date.now() : session.lastActivityAt;
+  const now = Date.now();
+  if (!userId || !lastActivityAt || now - lastActivityAt >= SESSION_IDLE_MS) {
+    delete data.sessions[token];
+    await write(data);
+    return null;
+  }
+
+  data.sessions[token] = { userId, lastActivityAt: now };
+  await write(data);
+  return userId;
 };
 const requireUser = async (req, res, next) => {
   const userId = await sessionUser(req);
@@ -374,7 +391,7 @@ app.post("/api/auth/signup", async (req, res) => {
   };
   data.users.push(user);
   const token = id();
-  data.sessions[token] = user.id;
+  data.sessions[token] = { userId: user.id, lastActivityAt: Date.now() };
   await write(data);
   notifyNewSignup(user).catch((error) =>
     console.error("Signup notification error:", error.message),
@@ -390,7 +407,7 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(401).json({ error: "Incorrect email or password." });
   if (!user.password.includes(":")) user.password = hash(req.body.password);
   const token = id();
-  data.sessions[token] = user.id;
+  data.sessions[token] = { userId: user.id, lastActivityAt: Date.now() };
   await write(data);
   res.json({ token, user: publicUser(user) });
 });
@@ -400,6 +417,9 @@ app.post("/api/auth/logout", requireUser, async (req, res) => {
     (req.headers.authorization || "").replace("Bearer ", "")
   ];
   await write(data);
+  res.json({ ok: true });
+});
+app.post("/api/auth/heartbeat", requireUser, (_req, res) => {
   res.json({ ok: true });
 });
 const publicUser = ({ password, ...user }) => {
@@ -436,7 +456,9 @@ app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
 
   data.users.splice(userIndex, 1);
   Object.keys(data.sessions).forEach((token) => {
-    if (data.sessions[token] === req.params.id) delete data.sessions[token];
+    const session = data.sessions[token];
+    if ((typeof session === "string" ? session : session.userId) === req.params.id)
+      delete data.sessions[token];
   });
   data.depositRequests = data.depositRequests.filter(
     (request) => request.userId !== req.params.id,

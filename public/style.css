@@ -549,6 +549,22 @@ nav {
   justify-content: flex-end;
   gap: 10px;
 }
+.device-dialog-bg {
+  z-index: 1100;
+  padding: max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+}
+.device-dialog {
+  max-height: min(80dvh, 460px);
+}
+.device-dialog .confirm-actions button {
+  min-height: 44px;
+}
+.device-dialog .device-dialog-confirm.danger {
+  margin-top: 0;
+}
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

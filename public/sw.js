@@ -1,4 +1,4 @@
-const CACHE_NAME = "onchainvault-shell-v1";
+const CACHE_NAME = "onchainvault-shell-v3";
 const APP_SHELL = ["/", "/index.html", "/style.css", "/app.js", "/icons/icon.svg"];
 
 self.addEventListener("install", (event) => {
