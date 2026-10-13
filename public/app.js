@@ -218,7 +218,7 @@ function assetRows() {
     .map((asset) => {
       const [icon, name, cls] = meta[asset.symbol] || ["•", asset.symbol, ""];
       const market = livePrices[asset.symbol];
-      return `<div class="asset"><div class="asset-left"><span class="token ${cls}">${icon}</span><div><b>${name}</b><div class="small live-price" data-symbol="${asset.symbol}">Current value: ${money(market.usd)} · ${market.change.toFixed(2)}% (24h)</div><div class="asset-balance"><span>Your balance</span><strong>${asset.amount.toLocaleString("en-US", { maximumFractionDigits: 6 })} <small>${asset.symbol}</small></strong></div></div></div><b class="holding-value" data-symbol="${asset.symbol}" data-amount="${asset.amount}">${money(asset.amount * market.usd)}</b></div>`;
+      return `<div class="asset"><div class="asset-left"><span class="token ${cls}">${icon}</span><div><b>${name}</b><div class="small live-price" data-symbol="${asset.symbol}">Current value: ${money(market.usd)} · ${market.change.toFixed(2)}% (24h)</div><div class="asset-balance"><span>Your holdings</span><strong>${asset.amount.toLocaleString("en-US", { maximumFractionDigits: 6 })} <small>${asset.symbol}</small></strong></div></div></div><b class="holding-value" data-symbol="${asset.symbol}" data-amount="${asset.amount}">${money(asset.amount * market.usd)}</b></div>`;
     })
     .join("");
 }
