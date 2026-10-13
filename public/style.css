@@ -279,6 +279,12 @@ nav {
 .bonus-heading p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .bonus-icon { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 10px; color: var(--green); background: #163527; font-size: 20px; }
 .admin-bonus-panel textarea { min-height: 76px; resize: vertical; }
+.admin-account-actions { display: flex; align-items: center; gap: 8px; min-width: max-content; }
+.award-bonus-action { min-height: 38px; padding: 0 12px; border: 1px solid #315d47; border-radius: 9px; color: #8af0b8; background: #14271e; font-size: 12px; font-weight: 650; }
+.award-bonus-action:hover { border-color: #58a979; background: #193427; }
+.admin-bonus-modal textarea { min-height: 96px; resize: vertical; }
+.bonus-recipient { margin: 0 0 22px; line-height: 1.6; }
+.bonus-recipient strong { color: #eef1f8; }
 .field-help { margin-top: 7px; }
 .admin-user-modal .danger { margin-top: 10px; }
 .active-stakes { margin-top: 36px; }

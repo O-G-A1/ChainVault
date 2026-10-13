@@ -743,11 +743,11 @@ async function admin() {
     const rows = customers
       .map(
         (user) =>
-          `<tr><td><b>${user.name}</b><div class="small">${user.email}</div></td><td>${money(portfolioValue(user.assets, livePrices, user.stakes))}</td><td><span class="status ${user.verified ? "" : "off"}">${user.verified ? "Verified" : "Pending"}</span></td><td>${user.createdAt}</td><td><button class="edit" onclick="editUser('${user.id}')">Manage</button></td></tr>`,
+          `<tr><td><b>${escapeHtml(user.name)}</b><div class="small">${escapeHtml(user.email)}</div></td><td>${money(portfolioValue(user.assets, livePrices, user.stakes))}</td><td><span class="status ${user.verified ? "" : "off"}">${user.verified ? "Verified" : "Pending"}</span></td><td>${escapeHtml(user.createdAt)}</td><td><div class="admin-account-actions"><button class="edit" onclick="editUser('${user.id}')">Manage</button><button class="action award-bonus-action" onclick="openBonusModal('${user.id}')">Award bonus</button></div></td></tr>`,
       )
       .join("");
     shell(
-      `<header class="topbar"><div><h1>Admin console</h1><p>Updates are applied only to the account you select.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header>${pendingDeposits(deposits)}${pendingWithdrawals(withdrawals)}<div class="card"><h3>All customer accounts <span class="small">(${customers.length})</span></h3><div style="overflow:auto"><table class="admin-table"><thead><tr><th>User</th><th>Portfolio</th><th>Status</th><th>Joined</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="small">No customer accounts yet.</td></tr>'}</tbody></table></div></div>`,
+      `<header class="topbar"><div><h1>Admin console</h1><p>Updates are applied only to the account you select.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header>${pendingDeposits(deposits)}${pendingWithdrawals(withdrawals)}<div class="card"><h3>All customer accounts <span class="small">(${customers.length})</span></h3><div style="overflow:auto"><table class="admin-table"><thead><tr><th>User</th><th>Portfolio</th><th>Status</th><th>Joined</th><th>Account actions</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="small">No customer accounts yet.</td></tr>'}</tbody></table></div></div>`,
       "admin",
     );
   } catch {
@@ -809,6 +809,36 @@ function editUser(id) {
     "beforeend",
     `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>Manage account</h2><button class="close" onclick="modal.remove()">×</button></div><label class="field">NAME</label><input class="input" id="editName" value="${user.name}"><label class="field">EMAIL</label><input class="input" id="editEmail" value="${user.email}"><div class="form-row"><div><label class="field">CURRENT PORTFOLIO</label><div class="input" style="color:#bfc6d6">${money(portfolioValue(user.assets, livePrices, user.stakes))}</div></div><div><label class="field">MONTHLY CHANGE (%)</label><input class="input" id="editChange" type="number" value="${user.change}"></div></div><label class="field">ADD FUNDS (USDC)</label><input class="input" id="adminCredit" type="number" min="0" step="0.01" placeholder="Enter an amount to add"><label class="field">WITHDRAW FUNDS (USDC)</label><input class="input" id="adminWithdrawal" type="number" min="0" step="0.01" placeholder="Enter an amount to remove"><label class="field">MINIMUM BALANCE TO WITHDRAW (USD)</label><input class="input" id="editWithdrawalLimit" type="number" min="0" step="0.01" value="${user.withdrawalLimit ?? ""}" placeholder="Leave blank to remove limit"><div class="small" style="margin-top:7px">Users cannot withdraw unless their total portfolio reaches this minimum balance. Leave blank or zero to remove it.</div><label class="field">VERIFICATION</label><select class="input" id="editVerified"><option value="true" ${user.verified ? "selected" : ""}>Verified</option><option value="false" ${!user.verified ? "selected" : ""}>Pending</option></select><button class="primary wide" onclick="saveUser('${id}')">Save changes</button><button class="danger wide" onclick="deleteUser('${id}')">Delete account</button></div></div>`,
   );
+}
+function openBonusModal(id) {
+  const user = users.find((item) => item.id === id);
+  if (!user) return;
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `<div class="modal-bg" id="bonusModal"><div class="modal admin-bonus-modal"><div class="modal-head"><h2>Award bonus</h2><button class="close" onclick="document.getElementById('bonusModal').remove()">×</button></div><p class="small bonus-recipient">Bonus for <strong>${escapeHtml(user.name)}</strong> · ${escapeHtml(user.email)}</p><label class="field" for="bonusAmount">BONUS AMOUNT (USDC)</label><input class="input" id="bonusAmount" type="number" min="0.01" max="1000000" step="0.01" placeholder="Enter amount"><label class="field" for="bonusReason">REASON</label><textarea class="input" id="bonusReason" maxlength="250" placeholder="Explain why this bonus is being awarded"></textarea><div class="small field-help">The reason is saved in the customer's transaction history.</div><button class="primary wide" id="awardBonusButton" onclick="awardBonus('${id}')">Award bonus</button></div></div>`,
+  );
+}
+async function awardBonus(id) {
+  const amount = Number(document.getElementById("bonusAmount")?.value);
+  const reason = document.getElementById("bonusReason")?.value.trim() || "";
+  const button = document.getElementById("awardBonusButton");
+  if (!Number.isFinite(amount) || amount < 0.01 || amount > 1000000) return showNotice("Enter a bonus amount between $0.01 and $1,000,000.");
+  if (reason.length < 3 || reason.length > 250) return showNotice("Enter a reason between 3 and 250 characters.");
+  button.disabled = true;
+  button.textContent = "Awarding…";
+  try {
+    await api(`/api/admin/users/${id}/bonus`, {
+      method: "POST",
+      body: JSON.stringify({ amount, reason }),
+    });
+    document.getElementById("bonusModal")?.remove();
+    showNotice("Bonus awarded successfully.");
+    admin();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "Award bonus";
+    showNotice(error.message);
+  }
 }
 async function saveUser(id) {
   try {

@@ -687,31 +687,6 @@ app.post("/api/admin/users/:id/bonus", requireAdmin, async (req, res) => {
   await write(data);
   res.json(publicUser(user));
 });
-app.post("/api/admin/users/:id/bonus", requireAdmin, async (req, res) => {
-  const amount = Number(req.body.amount);
-  const reason = typeof req.body.reason === "string" ? req.body.reason.trim() : "";
-  const data = await read();
-  const user = data.users.find((entry) => entry.id === req.params.id);
-  if (!user) return res.status(404).json({ error: "User not found." });
-  if (!Number.isFinite(amount) || amount < 0.01 || amount > 1_000_000)
-    return res.status(400).json({ error: "Enter a bonus amount between $0.01 and $1,000,000." });
-  if (reason.length < 3 || reason.length > 250)
-    return res.status(400).json({ error: "Enter a reason between 3 and 250 characters." });
-
-  const stablecoin = ensureAsset(user, "USDC");
-  stablecoin.amount = Number((Number(stablecoin.amount || 0) + amount).toFixed(2));
-  refreshBalance(user);
-  addTransaction(user, {
-    title: "Admin bonus",
-    subtitle: reason,
-    asset: "USDC",
-    amount: `+${amount.toFixed(2)}`,
-    value: moneyValue(amount),
-    status: "completed",
-  });
-  await write(data);
-  res.json(publicUser(user));
-});
 app.get("/api/admin/deposits", requireAdmin, async (req, res) => {
   const data = await read();
   res.json(
