@@ -994,18 +994,64 @@ nav {
   }
   .menu {
     grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-    gap: 6px;
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
     margin: 0;
-    overflow: visible;
+    padding: 0 0 1px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    border-bottom: 1px solid #292f3d;
   }
+  .menu::-webkit-scrollbar { display: none; }
   .menu button {
-    white-space: normal;
-    width: 100%;
-    padding: 10px 6px;
+    position: relative;
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 48px;
+    margin: 0;
+    padding: 0 15px;
+    border-radius: 0;
+    color: #a5adbd;
     text-align: center;
-    font-size: 12px;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+    transition: color 160ms ease, background 160ms ease;
+  }
+  .menu button.active,
+  .menu button.active:hover {
+    color: #f7f5ff;
+    background: transparent;
+  }
+  .menu button.active::after {
+    position: absolute;
+    content: "";
+    right: 12px;
+    bottom: -1px;
+    left: 12px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: var(--purple);
+  }
+  .menu button:hover:not(.active) {
+    color: #e5e8ef;
+    background: #171d2a;
+  }
+  .menu button:focus-visible {
+    outline: 2px solid #a79aff;
+    outline-offset: -3px;
+  }
+  .menu button[onclick="walletModal('receive')"] {
+    margin: 7px 0;
+    min-height: 34px;
+    border: 1px solid #394253;
+    border-radius: 8px;
+    color: #d9dcea;
+  }
+  .menu button[onclick="walletModal('receive')"].active::after {
+    display: none;
   }
   .side-footer {
     display: block;
