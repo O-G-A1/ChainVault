@@ -365,6 +365,33 @@ nav {
   color: var(--muted);
   margin-top: 4px;
 }
+.asset-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 9px;
+  padding: 7px 10px;
+  border: 1px solid #343553;
+  border-left: 2px solid #8d79ff;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #8d79ff12, #8d79ff04);
+}
+.asset-balance > span {
+  color: #aeb5c8;
+  font-size: 11px;
+  font-weight: 600;
+}
+.asset-balance strong {
+  color: #f2f0ff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.asset-balance strong small {
+  color: #bcb2ff;
+  font-size: 10px;
+  font-weight: 700;
+}
 .tx {
   display: flex;
   justify-content: space-between;
