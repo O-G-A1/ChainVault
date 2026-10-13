@@ -185,6 +185,10 @@ const initializeData = () => {
                 ];
             changed = true;
           }
+          if (!Array.isArray(user.stakes)) {
+            user.stakes = [];
+            changed = true;
+          }
           if (Array.isArray(user.assets)) {
             const computed = normalizeBalance({ ...user, assets: user.assets });
             if (Math.abs((Number(user.balance) || 0) - computed) >= 0.01) {
@@ -247,7 +251,10 @@ async function currentMarketPrices() {
 const assetValue = (user) =>
   user.assets.reduce(
     (total, asset) => total + asset.amount * PRICES[asset.symbol],
-    0,
+    (user.stakes || []).reduce(
+      (total, stake) => total + Number(stake.amount || 0) * PRICES[stake.symbol],
+      0,
+    ),
   );
 const normalizeBalance = (user, market = PRICES) => {
   if (!Array.isArray(user.assets)) return Number(user.balance || 0);
@@ -258,7 +265,11 @@ const normalizeBalance = (user, market = PRICES) => {
           total +
           (Number(asset.amount) || 0) *
             (market[asset.symbol]?.usd ?? PRICES[asset.symbol] ?? 0),
-        0,
+        (user.stakes || []).reduce(
+          (total, stake) =>
+            total + Number(stake.amount || 0) * (market[stake.symbol]?.usd ?? PRICES[stake.symbol] ?? 0),
+          0,
+        ),
       )
       .toFixed(2),
   );
@@ -284,7 +295,10 @@ const refreshBalanceAtMarket = (user, market) => {
     user.assets
       .reduce(
         (total, asset) => total + asset.amount * market[asset.symbol].usd,
-        0,
+        (user.stakes || []).reduce(
+          (total, stake) => total + Number(stake.amount || 0) * market[stake.symbol].usd,
+          0,
+        ),
       )
       .toFixed(2),
   );
@@ -312,14 +326,53 @@ const applyBalanceAdjustment = (user, delta, options = {}) => {
   return user.balance;
 };
 const addTransaction = (user, transaction) =>
-  user.transactions.unshift({ id: id(), createdAt: new Date().toISOString(), ...transaction });
+  (user.transactions ||= []).unshift({ id: id(), createdAt: new Date().toISOString(), ...transaction });
 const ensureAsset = (user, symbol) => {
+  user.assets ||= [];
   let asset = user.assets.find((item) => item.symbol === symbol);
   if (!asset) {
     asset = { symbol, amount: 0 };
     user.assets.push(asset);
   }
   return asset;
+};
+const addMonths = (date, months) => {
+  const next = new Date(date);
+  const day = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, lastDay));
+  return next;
+};
+const processMaturedStakes = (user, market) => {
+  const now = new Date();
+  let changed = false;
+  (user.stakes || []).forEach((stake) => {
+    const startedAt = new Date(stake.startedAt);
+    if (!Number.isFinite(startedAt.getTime())) return;
+    let due = Number(stake.maturedMonths || 0) + 1;
+    while (addMonths(startedAt, due) <= now) {
+      const asset = ensureAsset(user, stake.symbol);
+      const reward = Number((Number(stake.amount) * 0.1).toFixed(8));
+      if (reward > 0) {
+        asset.amount = Number((Number(asset.amount || 0) + reward).toFixed(8));
+        addTransaction(user, {
+          title: `${stake.symbol} staking reward`,
+          subtitle: "Monthly reward · 10% of staked amount",
+          asset: stake.symbol,
+          amount: `+${reward}`,
+          value: moneyValue(reward * (market[stake.symbol]?.usd ?? PRICES[stake.symbol])),
+          status: "completed",
+        });
+      }
+      stake.maturedMonths = due;
+      due += 1;
+      changed = true;
+    }
+  });
+  if (changed) refreshBalanceAtMarket(user, market);
+  return changed;
 };
 const escapeHtml = (value) =>
   String(value).replace(
@@ -387,6 +440,7 @@ app.post("/api/auth/signup", async (req, res) => {
       { symbol: "ETH", amount: 0 },
       { symbol: "USDC", amount: 0 },
     ],
+    stakes: [],
     transactions: [],
   };
   data.users.push(user);
@@ -406,6 +460,9 @@ app.post("/api/auth/login", async (req, res) => {
   if (!user || !verifyPassword(req.body.password || "", user.password))
     return res.status(401).json({ error: "Incorrect email or password." });
   if (!user.password.includes(":")) user.password = hash(req.body.password);
+  if (!Array.isArray(user.stakes)) user.stakes = [];
+  const market = await currentMarketPrices();
+  processMaturedStakes(user, market);
   const token = id();
   data.sessions[token] = { userId: user.id, lastActivityAt: Date.now() };
   await write(data);
@@ -430,10 +487,12 @@ const publicUser = ({ password, ...user }) => {
 app.get("/api/me", requireUser, async (req, res) => {
   const data = await read();
   const user = data.users.find((u) => u.id === req.userId);
+  const market = await currentMarketPrices();
+  const rewardsChanged = user ? processMaturedStakes(user, market) : false;
   if (user && Array.isArray(user.assets)) {
     const priorBalance = Number(user.balance || 0);
-    const normalized = normalizeBalance(user);
-    if (Math.abs(priorBalance - normalized) >= 0.01) await write(data);
+    const normalized = normalizeBalance(user, market);
+    if (rewardsChanged || Math.abs(priorBalance - normalized) >= 0.01) await write(data);
   }
   res.json(publicUser(user));
 });
@@ -803,12 +862,92 @@ app.post("/api/wallet/swap", requireUser, async (req, res) => {
   await write(data);
   res.json(publicUser(user));
 });
+app.post("/api/earn/stakes", requireUser, async (req, res) => {
+  const { symbol } = req.body;
+  const amount = Number(req.body.amount);
+  if (!PRICES[symbol] || !Number.isFinite(amount) || amount < 0.0000001)
+    return res.status(400).json({ error: "Choose a valid asset and amount to stake." });
+
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.userId);
+  const market = await currentMarketPrices();
+  user.stakes ||= [];
+  processMaturedStakes(user, market);
+  const totalValue = normalizeBalance(user, market);
+  if (totalValue < 2000)
+    return res.status(403).json({ error: "Your Vault balance must be at least $2,000 to start staking." });
+
+  const asset = ensureAsset(user, symbol);
+  if (amount > Number(asset.amount || 0) + 1e-10)
+    return res.status(400).json({ error: `You have ${asset.amount} ${symbol} available to stake.` });
+
+  asset.amount = Number((Number(asset.amount) - amount).toFixed(8));
+  const stake = {
+    id: id(),
+    symbol,
+    amount: Number(amount.toFixed(8)),
+    startedAt: new Date().toISOString(),
+    maturedMonths: 0,
+  };
+  user.stakes.unshift(stake);
+  refreshBalanceAtMarket(user, market);
+  addTransaction(user, {
+    title: `Staked ${symbol}`,
+    subtitle: "Staking position opened",
+    asset: symbol,
+    amount: `-${stake.amount}`,
+    value: moneyValue(stake.amount * market[symbol].usd),
+    status: "completed",
+  });
+  await write(data);
+  res.json(publicUser(user));
+});
+app.delete("/api/earn/stakes/:id", requireUser, async (req, res) => {
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.userId);
+  const market = await currentMarketPrices();
+  user.stakes ||= [];
+  processMaturedStakes(user, market);
+  const stakeIndex = user.stakes.findIndex((entry) => entry.id === req.params.id);
+  if (stakeIndex === -1)
+    return res.status(404).json({ error: "This staking position was not found." });
+
+  const [stake] = user.stakes.splice(stakeIndex, 1);
+  const asset = ensureAsset(user, stake.symbol);
+  asset.amount = Number((Number(asset.amount || 0) + Number(stake.amount)).toFixed(8));
+  refreshBalanceAtMarket(user, market);
+  addTransaction(user, {
+    title: `Unstaked ${stake.symbol}`,
+    subtitle: "Principal returned to available balance",
+    asset: stake.symbol,
+    amount: `+${stake.amount}`,
+    value: moneyValue(stake.amount * market[stake.symbol].usd),
+    status: "completed",
+  });
+  await write(data);
+  res.json(publicUser(user));
+});
 const moneyValue = (value) =>
   `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const isMain = import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
   const port = process.env.PORT || 3000;
-  initializeData().then(() => {
+  initializeData().then(async () => {
+    const accrueMaturedRewards = async () => {
+      try {
+        const data = await read();
+        const market = await currentMarketPrices();
+        let changed = false;
+        data.users.forEach((user) => {
+          if (processMaturedStakes(user, market)) changed = true;
+        });
+        if (changed) await write(data);
+      } catch (error) {
+        console.error("Monthly staking accrual failed:", error.message);
+      }
+    };
+    await accrueMaturedRewards();
+    setInterval(accrueMaturedRewards, 15 * 60 * 1000).unref();
     const server = app.listen(port, () => {
       console.log(`OnchainVault running at http://localhost:${port}`);
     });

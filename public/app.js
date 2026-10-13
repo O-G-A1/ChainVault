@@ -207,17 +207,26 @@ async function submitAuth(mode) {
 function shell(body, tab = "dashboard") {
   app.innerHTML = `<div class="app-shell"><aside class="side">${brand}<div class="menu"><button class="${tab === "dashboard" ? "active" : ""}" onclick="dashboard()">◈ &nbsp; Overview</button><button class="${tab === "earn" ? "active" : ""}" onclick="earn()">✦ &nbsp; Earn</button><button class="${tab === "activity" ? "active" : ""}" onclick="activity()">⇄ &nbsp; Activity</button><button onclick="walletModal('receive')">＋ &nbsp; Add funds</button>${me.role === "admin" ? `<button class="${tab === "admin" ? "active" : ""}" onclick="admin()">♙ &nbsp; Admin Console</button>` : ""}</div><div class="side-footer"><button class="menu-btn" onclick="logout()">↪ &nbsp; Sign out</button></div></aside><section class="content">${body}</section></div>`;
 }
-function portfolioValue(assets = [], prices = livePrices) {
+function portfolioValue(assets = [], prices = livePrices, stakes = []) {
   return (assets || []).reduce(
     (sum, asset) =>
       sum + Number(asset.amount || 0) * (prices[asset.symbol]?.usd ?? 0),
-    0,
+    (stakes || []).reduce(
+      (sum, stake) => sum + Number(stake.amount || 0) * (prices[stake.symbol]?.usd ?? 0),
+      0,
+    ),
   );
 }
 function formatQuantity(value) {
   const quantity = Number(String(value ?? "0").replace(/,/g, ""));
   return Number.isFinite(quantity)
     ? quantity.toLocaleString("en-US", { maximumFractionDigits: 3 })
+    : String(value ?? "");
+}
+function formatAssetAmount(value) {
+  const quantity = Number(value || 0);
+  return Number.isFinite(quantity)
+    ? quantity.toLocaleString("en-US", { maximumFractionDigits: 8 })
     : String(value ?? "");
 }
 function formatTransactionAmount(value) {
@@ -261,7 +270,7 @@ async function refreshLivePrices() {
         );
       }
     });
-    const total = portfolioValue(me.assets, livePrices);
+    const total = portfolioValue(me.assets, livePrices, me.stakes);
     const totalElement = document.getElementById("livePortfolioValue");
     if (totalElement) totalElement.textContent = money(total);
     const earnBalance = document.getElementById("earnBalance");
@@ -360,25 +369,148 @@ function timeGreeting() {
 }
 function dashboard() {
   shell(
-    `<header class="topbar"><div><h1>${timeGreeting()}, ${me.name.split(" ")[0]}.</h1><p>Here’s how your Vault is doing today.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header><div class="grid"><div><div class="card balance-card"><div class="balance-label">Total Vault value</div><div class="balance" id="livePortfolioValue">${money(portfolioValue(me.assets, livePrices))}</div><span class="gain">↗ ${me.change}% this month</span><div class="actions"><button class="action" onclick="walletModal('receive')">↓ Receive</button><button class="action secondary" onclick="walletModal('send')">↑ Send</button><button class="action secondary" onclick="walletModal('swap')">⇄ Swap</button></div></div><div class="card" style="margin-top:18px"><h3>Your assets</h3><div class="small" id="marketUpdated">Loading live market prices…</div>${assetRows()}</div></div><div class="card"><h3>Recent activity</h3>${transactionRows()}<div class="switch" style="text-align:left"><span class="link" onclick="activity()">View all activity →</span></div></div></div>`,
+    `<header class="topbar"><div><h1>${timeGreeting()}, ${me.name.split(" ")[0]}.</h1><p>Here’s how your Vault is doing today.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header><div class="grid"><div><div class="card balance-card"><div class="balance-label">Total Vault value</div><div class="balance" id="livePortfolioValue">${money(portfolioValue(me.assets, livePrices, me.stakes))}</div><span class="gain">↗ ${me.change}% this month</span><div class="actions"><button class="action" onclick="walletModal('receive')">↓ Receive</button><button class="action secondary" onclick="walletModal('send')">↑ Send</button><button class="action secondary" onclick="walletModal('swap')">⇄ Swap</button></div></div><div class="card" style="margin-top:18px"><h3>Your assets</h3><div class="small" id="marketUpdated">Loading live market prices…</div>${assetRows()}</div></div><div class="card"><h3>Recent activity</h3>${transactionRows()}<div class="switch" style="text-align:left"><span class="link" onclick="activity()">View all activity →</span></div></div></div>`,
   );
   startPriceRefresh();
   startTimeRefresh();
 }
 function earn() {
-  const balance = portfolioValue(me.assets, livePrices);
+  clearInterval(puzzleTimer);
+  const balance = portfolioValue(me.assets, livePrices, me.stakes);
   const eligible = balance >= 2000;
+  const positions = (me.stakes || []).map((stake) => {
+    const [icon, name, cls] = meta[stake.symbol] || ["•", stake.symbol, ""];
+    const nextReward = stakeNextRewardDate(stake);
+    const monthlyReward = Number(stake.amount) * 0.1;
+    return `<article class="card position-card"><div class="position-main"><span class="token ${cls}">${icon}</span><div><b>${name} staking</b><div class="small">${formatAssetAmount(stake.amount)} ${stake.symbol} staked</div></div></div><div class="position-stat"><span>Monthly reward</span><strong>+${formatAssetAmount(monthlyReward)} ${stake.symbol}</strong></div><div class="position-stat"><span>Next reward</span><strong>${nextReward.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</strong></div><button class="outline unstake-button" onclick="unstake('${stake.id}')">Unstake</button></article>`;
+  }).join("");
   shell(
-    `<header class="topbar"><div><h1>Earn</h1><p>Explore ways to put your Vault to work.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Your current balance</div><div class="balance" id="earnBalance">${money(balance)}</div></div><span class="earn-pill ${eligible ? "eligible" : "locked"}">${eligible ? "Eligible" : "Locked · $2,000 minimum"}</span></section>${eligible ? `<section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Choose a way to get started.</h2><p>Explore available tasks. Offers and rewards will be shown before you commit.</p></div><span class="earn-spark">✦</span></section><div class="earn-grid"><article class="card earn-task"><div class="task-icon">◈</div><div class="task-tag">STAKING · COMING SOON</div><h3>Stake your USDC</h3><p>Put eligible USDC toward a staking opportunity. Review the terms, lockup, and risks before committing.</p><div class="task-footer"><span class="small">Requires USDC balance</span><button class="outline" onclick="earnTaskDetails('Stake your USDC')">View details</button></div></article><article class="card earn-task"><div class="task-icon task-icon-green">✓</div><div class="task-tag">ACCOUNT TASK</div><h3>Secure your Vault</h3><p>Review your account security settings and learn how to protect access to your assets.</p><div class="task-footer"><span class="small">No funds required</span><button class="outline" onclick="earnTaskDetails('Secure your Vault')">View details</button></div></article></div><p class="earn-disclaimer">Opportunities are a preview. No funds are moved and no rewards are credited from this page yet.</p>` : `<section class="card earn-locked"><div class="locked-icon">⌑</div><h2>Build your balance to unlock Earn</h2><p>Your Vault needs a balance of at least <strong>$2,000</strong> to access earning tasks. Your current balance is ${money(balance)}.</p><button class="primary" onclick="dashboard()">View my assets</button></section>`}`,
+    `<header class="topbar"><div><h1>Earn</h1><p>Put your assets to work and build your Vault.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Total Vault value</div><div class="balance" id="earnBalance">${money(balance)}</div><div class="earn-status ${eligible ? "eligible" : "locked"}">${eligible ? "Available to stake" : "Locked · $2,000 minimum balance"}</div></div></section><section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Make more of your assets.</h2><p>Stake a supported asset to earn a monthly reward, or take a quick puzzle break.</p></div><span class="earn-spark">✦</span></section><div class="earn-grid"><article class="card earn-task stake-offer"><div class="offer-heading"><div class="task-icon">◈</div><span class="rate-badge">10% monthly</span></div><div class="task-tag">FLEXIBLE STAKING</div><h3>Stake crypto</h3><p>Choose any supported asset and stake up to your available balance. Earn 10% of your staked amount each month, paid in the same crypto.</p><div class="task-footer"><span class="small">Unstake any time</span><button class="primary" onclick="startStaking()" ${eligible ? "" : "disabled"}>${eligible ? "Start staking" : "Unlock at $2,000"}</button></div></article><article class="card earn-task puzzle-card"><div class="offer-heading"><div class="task-icon task-icon-green">⌘</div><span class="puzzle-label">MEMORY GAME</span></div><div class="task-tag">ONCHAIN PUZZLE</div><h3>Crypto match</h3><p>Match every pair in as few moves as you can. Test your memory and beat your best time.</p><div class="puzzle-scoreline"><span id="puzzleProgress">6 pairs · 0 moves</span><span id="puzzleClock">Ready when you are</span></div><div class="puzzle-board" id="puzzleBoard" aria-label="Crypto matching puzzle"></div><div class="task-footer"><span class="small" id="puzzleResult">Find all six pairs.</span><button class="outline" id="puzzleStartButton" onclick="startPuzzle()">Start puzzle</button></div></article></div>${positions ? `<section class="active-stakes"><div class="section-heading"><div><div class="eyebrow">Your positions</div><h2>Active staking</h2></div><span class="small">${(me.stakes || []).length} position${(me.stakes || []).length === 1 ? "" : "s"}</span></div><div class="position-list">${positions}</div></section>` : ""}`,
     "earn",
   );
   startPriceRefresh();
 }
-function earnTaskDetails(task) {
-  const message = task === "Stake your USDC"
-    ? "Staking is being prepared. This preview does not connect to a staking provider, move assets, or guarantee returns. Terms and any lockup will be shown before this task becomes available."
-    : "This account task is a preview. Account security actions and any reward will be confirmed before the task becomes available.";
-  inAppDialog({ title: task, message });
+function stakeNextRewardDate(stake) {
+  const date = new Date(stake.startedAt);
+  const targetMonth = date.getUTCMonth() + Number(stake.maturedMonths || 0) + 1;
+  const day = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(targetMonth);
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(day, lastDay));
+  return date;
+}
+function startStaking() {
+  if (portfolioValue(me.assets, livePrices, me.stakes) < 2000) return;
+  const available = (me.assets || []).filter((asset) => Number(asset.amount) > 0);
+  if (!available.length) {
+    showNotice("There are no available assets to stake. Unstake a position or add funds to continue.", "No available assets");
+    return;
+  }
+  const choices = available.map((asset) => {
+    const [icon, name] = meta[asset.symbol] || ["•", asset.symbol];
+    return `<option value="${asset.symbol}">${icon} ${asset.symbol} · ${name}</option>`;
+  }).join("");
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal-bg" id="stakeModal"><section class="modal stake-modal" role="dialog" aria-modal="true" aria-labelledby="stakeTitle"><div class="modal-head"><h2 id="stakeTitle">Start staking</h2><button class="close" onclick="document.getElementById('stakeModal').remove()" aria-label="Close">×</button></div><p class="stake-intro">Earn <strong>10% monthly</strong> on your staked amount. Rewards are credited in the same crypto.</p><label class="field" for="stakeSymbol">CRYPTO ASSET</label><select class="input" id="stakeSymbol" onchange="updateStakeEstimate()">${choices}</select><div class="available-line" id="stakeAvailable"></div><label class="field" for="stakeAmount">AMOUNT TO STAKE</label><input class="input" id="stakeAmount" type="number" min="0.0000001" step="0.0000001" placeholder="Enter amount" oninput="updateStakeEstimate()"><div class="stake-estimate" id="stakeEstimate">Estimated monthly reward: —</div><div id="stakeError"></div><button class="primary wide" id="stakeSubmit" onclick="submitStake()">Confirm stake</button></section></div>`);
+  updateStakeEstimate();
+  document.getElementById("stakeAmount").focus();
+}
+function updateStakeEstimate() {
+  const symbol = document.getElementById("stakeSymbol")?.value;
+  const amountInput = document.getElementById("stakeAmount");
+  const asset = (me.assets || []).find((item) => item.symbol === symbol);
+  if (!symbol || !asset || !amountInput) return;
+  const amount = Number(amountInput.value);
+  document.getElementById("stakeAvailable").textContent = `Available: ${formatAssetAmount(asset.amount)} ${symbol} · ${money(asset.amount * (livePrices[symbol]?.usd || 0))}`;
+  document.getElementById("stakeEstimate").textContent = `Estimated monthly reward: ${amount > 0 ? `${formatAssetAmount(amount * 0.1)} ${symbol} (${money(amount * 0.1 * (livePrices[symbol]?.usd || 0))})` : "—"}`;
+  amountInput.max = String(asset.amount);
+}
+async function submitStake() {
+  const button = document.getElementById("stakeSubmit");
+  const error = document.getElementById("stakeError");
+  const symbol = document.getElementById("stakeSymbol").value;
+  const amount = Number(document.getElementById("stakeAmount").value);
+  button.disabled = true;
+  button.innerHTML = '<span class="button-spinner"></span>Starting stake…';
+  error.innerHTML = "";
+  try {
+    me = await api("/api/earn/stakes", { method: "POST", body: JSON.stringify({ symbol, amount }) });
+    document.getElementById("stakeModal").remove();
+    earn();
+  } catch (issue) {
+    error.innerHTML = `<div class="error">${issue.message}</div>`;
+    button.disabled = false;
+    button.textContent = "Confirm stake";
+  }
+}
+async function unstake(stakeId) {
+  const accepted = await inAppDialog({ title: "Unstake crypto?", message: "Your principal will return to your available balance. Any monthly rewards already credited will remain in your Vault.", confirmLabel: "Unstake position", cancelLabel: "Keep staking" });
+  if (!accepted) return;
+  try {
+    me = await api(`/api/earn/stakes/${encodeURIComponent(stakeId)}`, { method: "DELETE" });
+    earn();
+  } catch (issue) {
+    showNotice(issue.message);
+  }
+}
+let puzzleTimer = null;
+let puzzleState = { deck: [], open: [], matched: [], moves: 0, seconds: 0, busy: false, started: false };
+function startPuzzle() {
+  clearInterval(puzzleTimer);
+  const icons = ["₿", "◆", "$", "₮", "⬡", "◈"];
+  const deck = [...icons, ...icons];
+  for (let index = deck.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]];
+  }
+  puzzleState = { deck, open: [], matched: [], moves: 0, seconds: 0, busy: false, started: true };
+  document.getElementById("puzzleResult").textContent = "Find all six pairs.";
+  document.getElementById("puzzleStartButton").textContent = "Restart puzzle";
+  renderPuzzle();
+  puzzleTimer = setInterval(() => {
+    if (!puzzleState.started) return;
+    puzzleState.seconds += 1;
+    const clock = document.getElementById("puzzleClock");
+    if (clock) clock.textContent = puzzleTime();
+  }, 1000);
+}
+function puzzleTime() {
+  const minutes = Math.floor(puzzleState.seconds / 60);
+  return `${minutes}:${String(puzzleState.seconds % 60).padStart(2, "0")}`;
+}
+function renderPuzzle() {
+  const board = document.getElementById("puzzleBoard");
+  if (!board) return;
+  board.innerHTML = puzzleState.deck.map((icon, index) => {
+    const shown = puzzleState.open.includes(index) || puzzleState.matched.includes(index);
+    return `<button class="puzzle-tile ${shown ? "revealed" : ""} ${puzzleState.matched.includes(index) ? "matched" : ""}" onclick="flipPuzzleTile(${index})" aria-label="${shown ? icon : "Hidden tile"}" ${shown || !puzzleState.started || puzzleState.busy ? "disabled" : ""}>${shown ? icon : "?"}</button>`;
+  }).join("");
+  document.getElementById("puzzleProgress").textContent = `${puzzleState.matched.length / 2} of 6 pairs · ${puzzleState.moves} moves`;
+  document.getElementById("puzzleClock").textContent = puzzleState.started ? puzzleTime() : "Ready when you are";
+}
+function flipPuzzleTile(index) {
+  if (!puzzleState.started || puzzleState.busy || puzzleState.open.includes(index) || puzzleState.matched.includes(index)) return;
+  puzzleState.open.push(index);
+  if (puzzleState.open.length === 2) {
+    puzzleState.moves += 1;
+    const [first, second] = puzzleState.open;
+    if (puzzleState.deck[first] === puzzleState.deck[second]) {
+      puzzleState.matched.push(first, second);
+      puzzleState.open = [];
+      if (puzzleState.matched.length === puzzleState.deck.length) {
+        puzzleState.started = false;
+        clearInterval(puzzleTimer);
+        document.getElementById("puzzleResult").textContent = `Complete · ${puzzleState.moves} moves · ${puzzleTime()}`;
+        document.getElementById("puzzleStartButton").textContent = "Play again";
+      }
+    } else {
+      puzzleState.busy = true;
+      renderPuzzle();
+      setTimeout(() => { puzzleState.open = []; puzzleState.busy = false; renderPuzzle(); }, 700);
+      return;
+    }
+  }
+  renderPuzzle();
 }
 function activity() {
   shell(
@@ -553,7 +685,7 @@ async function admin() {
     const rows = customers
       .map(
         (user) =>
-          `<tr><td><b>${user.name}</b><div class="small">${user.email}</div></td><td>${money(portfolioValue(user.assets, livePrices))}</td><td><span class="status ${user.verified ? "" : "off"}">${user.verified ? "Verified" : "Pending"}</span></td><td>${user.createdAt}</td><td><button class="edit" onclick="editUser('${user.id}')">Manage</button></td></tr>`,
+          `<tr><td><b>${user.name}</b><div class="small">${user.email}</div></td><td>${money(portfolioValue(user.assets, livePrices, user.stakes))}</td><td><span class="status ${user.verified ? "" : "off"}">${user.verified ? "Verified" : "Pending"}</span></td><td>${user.createdAt}</td><td><button class="edit" onclick="editUser('${user.id}')">Manage</button></td></tr>`,
       )
       .join("");
     shell(
@@ -617,7 +749,7 @@ function editUser(id) {
   const user = users.find((item) => item.id === id);
   document.body.insertAdjacentHTML(
     "beforeend",
-    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>Manage account</h2><button class="close" onclick="modal.remove()">×</button></div><label class="field">NAME</label><input class="input" id="editName" value="${user.name}"><label class="field">EMAIL</label><input class="input" id="editEmail" value="${user.email}"><div class="form-row"><div><label class="field">CURRENT PORTFOLIO</label><div class="input" style="color:#bfc6d6">${money(portfolioValue(user.assets, livePrices))}</div></div><div><label class="field">MONTHLY CHANGE (%)</label><input class="input" id="editChange" type="number" value="${user.change}"></div></div><label class="field">ADD FUNDS (USDC)</label><input class="input" id="adminCredit" type="number" min="0" step="0.01" placeholder="Enter an amount to add"><label class="field">WITHDRAW FUNDS (USDC)</label><input class="input" id="adminWithdrawal" type="number" min="0" step="0.01" placeholder="Enter an amount to remove"><label class="field">MINIMUM BALANCE TO WITHDRAW (USD)</label><input class="input" id="editWithdrawalLimit" type="number" min="0" step="0.01" value="${user.withdrawalLimit ?? ""}" placeholder="Leave blank to remove limit"><div class="small" style="margin-top:7px">Users cannot withdraw unless their total portfolio reaches this minimum balance. Leave blank or zero to remove it.</div><label class="field">VERIFICATION</label><select class="input" id="editVerified"><option value="true" ${user.verified ? "selected" : ""}>Verified</option><option value="false" ${!user.verified ? "selected" : ""}>Pending</option></select><button class="primary wide" onclick="saveUser('${id}')">Save changes</button><button class="danger wide" onclick="deleteUser('${id}')">Delete account</button></div></div>`,
+    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>Manage account</h2><button class="close" onclick="modal.remove()">×</button></div><label class="field">NAME</label><input class="input" id="editName" value="${user.name}"><label class="field">EMAIL</label><input class="input" id="editEmail" value="${user.email}"><div class="form-row"><div><label class="field">CURRENT PORTFOLIO</label><div class="input" style="color:#bfc6d6">${money(portfolioValue(user.assets, livePrices, user.stakes))}</div></div><div><label class="field">MONTHLY CHANGE (%)</label><input class="input" id="editChange" type="number" value="${user.change}"></div></div><label class="field">ADD FUNDS (USDC)</label><input class="input" id="adminCredit" type="number" min="0" step="0.01" placeholder="Enter an amount to add"><label class="field">WITHDRAW FUNDS (USDC)</label><input class="input" id="adminWithdrawal" type="number" min="0" step="0.01" placeholder="Enter an amount to remove"><label class="field">MINIMUM BALANCE TO WITHDRAW (USD)</label><input class="input" id="editWithdrawalLimit" type="number" min="0" step="0.01" value="${user.withdrawalLimit ?? ""}" placeholder="Leave blank to remove limit"><div class="small" style="margin-top:7px">Users cannot withdraw unless their total portfolio reaches this minimum balance. Leave blank or zero to remove it.</div><label class="field">VERIFICATION</label><select class="input" id="editVerified"><option value="true" ${user.verified ? "selected" : ""}>Verified</option><option value="false" ${!user.verified ? "selected" : ""}>Pending</option></select><button class="primary wide" onclick="saveUser('${id}')">Save changes</button><button class="danger wide" onclick="deleteUser('${id}')">Delete account</button></div></div>`,
   );
 }
 async function saveUser(id) {
