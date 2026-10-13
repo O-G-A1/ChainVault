@@ -1366,3 +1366,32 @@ nav {
 @media (prefers-reduced-motion: reduce) {
   .puzzle-tile, .puzzle-foot #puzzleStartButton { transition: none; }
 }
+
+.earn-section { display: grid; gap: 18px; }
+.earn-section + .earn-section { margin-top: 38px; padding-top: 32px; border-top: 1px solid var(--line); }
+.earn-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.earn-section-heading h2 { margin: 6px 0 0; font: 600 23px "Space Grotesk"; letter-spacing: -.5px; }
+.earn-section-heading p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.earn-section-value { display: grid; gap: 5px; text-align: right; }
+.earn-section-value span { color: var(--muted); font-size: 11px; }
+.earn-section-value strong { font: 600 20px "Space Grotesk"; font-variant-numeric: tabular-nums; }
+.earn-section .earn-grid { grid-template-columns: minmax(0, 1fr); }
+.earn-section .earn-task { min-height: 0; }
+.earn-section .earn-task p { max-width: 68ch; }
+.earn-section .task-tag { margin-top: 14px; }
+.earn-empty-state { margin: 0; padding: 18px; border: 1px dashed #343b4d; border-radius: 12px; color: var(--muted); font-size: 13px; }
+.staking-section .active-stakes { margin-top: 8px; }
+.staking-section .position-card { background: linear-gradient(145deg, #141b28, #101520); }
+.game-section .game-profit-card { margin: 0; }
+.game-section .game-profit-head h3 { margin-top: 6px; font-size: 24px; }
+.game-section .game-profit-head > .small { text-align: right; }
+.game-section .puzzle-card { min-height: 0; }
+@media (max-width: 520px) {
+  .earn-section { gap: 14px; }
+  .earn-section + .earn-section { margin-top: 28px; padding-top: 24px; }
+  .earn-section-heading { align-items: flex-start; }
+  .earn-section-heading h2 { font-size: 20px; }
+  .earn-section-value strong { font-size: 17px; }
+  .earn-section-value span { max-width: 110px; line-height: 1.4; }
+  .game-section .game-profit-head { align-items: flex-start; }
+}
