@@ -387,7 +387,10 @@ nav {
 }
 .asset-balance strong {
   color: var(--text);
-  font: 600 14px "Space Grotesk";
+  min-width: 9ch;
+  text-align: right;
+  white-space: nowrap;
+  font: 600 13px "Space Grotesk";
   font-variant-numeric: tabular-nums;
 }
 .asset-balance strong small {
@@ -404,6 +407,8 @@ nav {
 .amount {
   text-align: right;
   font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .positive {
   color: var(--green);

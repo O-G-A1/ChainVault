@@ -213,12 +213,25 @@ function portfolioValue(assets = [], prices = livePrices) {
     0,
   );
 }
+function formatQuantity(value) {
+  const quantity = Number(String(value ?? "0").replace(/,/g, ""));
+  return Number.isFinite(quantity)
+    ? quantity.toLocaleString("en-US", { maximumFractionDigits: 3 })
+    : String(value ?? "");
+}
+function formatTransactionAmount(value) {
+  const amount = String(value ?? "0").trim();
+  const quantity = Number(amount.replace(/[^0-9.-]/g, ""));
+  if (!Number.isFinite(quantity)) return amount;
+  const formatted = formatQuantity(quantity);
+  return amount.startsWith("+") && quantity > 0 ? `+${formatted}` : formatted;
+}
 function assetRows() {
   return me.assets
     .map((asset) => {
       const [icon, name, cls] = meta[asset.symbol] || ["•", asset.symbol, ""];
       const market = livePrices[asset.symbol];
-      return `<div class="asset"><div class="asset-left"><span class="token ${cls}">${icon}</span><div><b>${name}</b><div class="small live-price" data-symbol="${asset.symbol}">Current value: ${money(market.usd)} · ${market.change.toFixed(2)}% (24h)</div><div class="asset-balance"><span>Your holdings</span><strong>${asset.amount.toLocaleString("en-US", { maximumFractionDigits: 6 })} <small>${asset.symbol}</small></strong></div></div></div><b class="holding-value" data-symbol="${asset.symbol}" data-amount="${asset.amount}">${money(asset.amount * market.usd)}</b></div>`;
+      return `<div class="asset"><div class="asset-left"><span class="token ${cls}">${icon}</span><div><b>${name}</b><div class="small live-price" data-symbol="${asset.symbol}">Current value: ${money(market.usd)} · ${market.change.toFixed(2)}% (24h)</div><div class="asset-balance"><span>Your holdings</span><strong>${formatQuantity(asset.amount)} <small>${asset.symbol}</small></strong></div></div></div><b class="holding-value" data-symbol="${asset.symbol}" data-amount="${asset.amount}">${money(asset.amount * market.usd)}</b></div>`;
     })
     .join("");
 }
@@ -276,6 +289,7 @@ function transactionRows(all = false) {
           tx.status === "pending" && tx.asset && livePrices[tx.asset]
             ? money(Math.abs(amountValue) * livePrices[tx.asset].usd)
             : tx.value;
+        const displayAmount = formatTransactionAmount(tx.amount);
 
         const state =
           tx.status === "pending"
@@ -288,7 +302,7 @@ function transactionRows(all = false) {
           ? `<span data-timeago="${tx.createdAt}">${timeAgo(tx.createdAt)}</span>`
           : tx.time;
 
-        return `<div class="tx" data-asset="${tx.asset}" data-amount="${tx.amount}" data-pending="${tx.status === "pending"}"><div class="tx-left"><span class="token ${cls}">${icon}</span><div><b>${tx.title}</b><div class="small">${tx.subtitle} · ${when}</div></div></div><div class="amount ${tx.amount.startsWith("+") && tx.status !== "cancelled" ? "positive" : ""}">${tx.amount}<div class="small" data-live-value>${displayValue}</div>${state}</div></div>`;
+        return `<div class="tx" data-asset="${tx.asset}" data-amount="${tx.amount}" data-pending="${tx.status === "pending"}"><div class="tx-left"><span class="token ${cls}">${icon}</span><div><b>${tx.title}</b><div class="small">${tx.subtitle} · ${when}</div></div></div><div class="amount ${tx.amount.startsWith("+") && tx.status !== "cancelled" ? "positive" : ""}">${displayAmount}<div class="small" data-live-value>${displayValue}</div>${state}</div></div>`;
       })
       .join("") ||
     '<p class="small">No activity yet. Add funds to begin building your Vault.</p>'
