@@ -1085,7 +1085,8 @@ app.post("/api/earn/game/flip", requireUser, async (req, res) => {
     challenge.resumedAt = null;
     const elapsedSeconds = Math.max(1, elapsedMs / 1000);
     const parSeconds = challenge.pairs * 8 + 20;
-    const speedMultiplier = elapsedSeconds <= parSeconds ? 1.5 : elapsedSeconds <= parSeconds * 1.75 ? 1.25 : 1;
+    const speedMultiplier = Math.min(1.5, Math.max(0.25, parSeconds / elapsedSeconds));
+    const moveMultiplier = Math.max(0.25, Math.min(1, challenge.pairs / Math.max(challenge.pairs, challenge.moves)));
     const accountBalance = normalizeBalance(user, await currentMarketPrices());
     let rewardUsd = 0;
     let payoutUsd = 0;
@@ -1093,7 +1094,7 @@ app.post("/api/earn/game/flip", requireUser, async (req, res) => {
     if (accountBalance > 0) {
       if (!(Number(game.rewardCycleBalanceUsd) > 0)) game.rewardCycleBalanceUsd = accountBalance;
       const cycleCap = Number(game.rewardCycleBalanceUsd) * 0.05;
-      rewardRatePercent = 0.05 * challenge.level * speedMultiplier;
+      rewardRatePercent = 0.05 * challenge.level * speedMultiplier * moveMultiplier;
       rewardUsd = Number((Number(game.rewardCycleBalanceUsd) * rewardRatePercent / 100).toFixed(8));
       game.pendingProfitUsd = Number(Math.min(cycleCap, Number(game.pendingProfitUsd || 0) + rewardUsd).toFixed(8));
       if (game.pendingProfitUsd + 1e-8 >= cycleCap) {
@@ -1117,7 +1118,9 @@ app.post("/api/earn/game/flip", requireUser, async (req, res) => {
     game.lastReward = {
       level: challenge.level,
       elapsedSeconds: Number(elapsedSeconds.toFixed(1)),
+      moves: challenge.moves,
       speedMultiplier,
+      moveMultiplier,
       rewardRatePercent,
       rewardUsd,
       pendingProfitUsd: Number(game.pendingProfitUsd || 0),
