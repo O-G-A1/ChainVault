@@ -1313,3 +1313,61 @@ nav {
   .landing .nav-actions button { padding-inline: 8px; font-size: 11px; }
   .hero h1 { font-size: 33px; }
 }
+
+/* Puzzle controls and board adapt cleanly to narrow cards and touch screens. */
+.puzzle-card { min-width: 0; }
+.puzzle-card > p { max-width: 62ch; }
+.puzzle-scoreline { align-items: center; gap: 8px 14px; flex-wrap: wrap; line-height: 1.4; }
+#puzzleClock { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.puzzle-board { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(5px, 1.2vw, 9px); }
+.puzzle-tile {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 0;
+  border-radius: clamp(8px, 1.5vw, 12px);
+  font-size: clamp(15px, 2.6vw, 22px);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+.puzzle-tile:not(:disabled):hover { background: #25213b; }
+.puzzle-tile:not(:disabled):active { transform: scale(.95); background: #312957; }
+.puzzle-tile:disabled { cursor: default; }
+.puzzle-tile.matched { animation: puzzle-match 240ms ease-out; }
+@keyframes puzzle-match {
+  50% { transform: scale(1.06); box-shadow: 0 0 0 3px #78f5b226; }
+}
+.puzzle-foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+  gap: 12px;
+  margin-top: 16px;
+}
+.puzzle-foot .small { min-height: 34px; line-height: 1.5; }
+.puzzle-foot #puzzleStartButton {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+.puzzle-foot #puzzleStartButton:not(:disabled):hover { border-color: #8170ed; background: #292443; }
+.puzzle-foot #puzzleStartButton:not(:disabled):active { transform: translateY(1px); }
+.puzzle-foot #puzzleStartButton:disabled { cursor: progress; }
+@media (max-width: 800px) {
+  .puzzle-board { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .puzzle-card > p { max-width: none; }
+}
+@media (max-width: 480px) {
+  .puzzle-board { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+  .puzzle-tile { font-size: clamp(17px, 5vw, 22px); }
+  .puzzle-scoreline { align-items: flex-start; }
+  .puzzle-foot { margin-top: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .puzzle-tile, .puzzle-foot #puzzleStartButton { transition: none; }
+  .puzzle-tile.matched { animation: none; }
+}

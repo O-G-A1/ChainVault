@@ -401,6 +401,8 @@ const gameStateForClient = (game) => ({
         ),
         completed: game.challenge.completed,
         startedAt: game.challenge.startedAt,
+        resumedAt: game.challenge.resumedAt || null,
+        elapsedMs: Number(game.challenge.elapsedMs || 0),
         lastReward: game.lastReward || null,
       }
     : null,
@@ -1012,9 +1014,28 @@ app.post("/api/earn/game/start", requireUser, async (req, res) => {
       openIndices: [],
       lockUntil: 0,
       startedAt: new Date().toISOString(),
+      resumedAt: new Date().toISOString(),
+      elapsedMs: 0,
       completed: false,
     };
     user.earnGame.challenge = challenge;
+    await write(data);
+  } else if (!challenge.resumedAt) {
+    challenge.elapsedMs = Number(challenge.elapsedMs || 0);
+    challenge.resumedAt = new Date().toISOString();
+    await write(data);
+  }
+  res.json({ game: gameStateForClient(user.earnGame) });
+});
+app.post("/api/earn/game/pause", requireUser, async (req, res) => {
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.userId);
+  const challenge = user?.earnGame?.challenge;
+  if (!challenge || challenge.id !== req.body.challengeId || challenge.completed)
+    return res.status(409).json({ error: "This puzzle round is no longer active." });
+  if (challenge.resumedAt) {
+    challenge.elapsedMs = Number(challenge.elapsedMs || 0) + Math.max(0, Date.now() - new Date(challenge.resumedAt).getTime());
+    challenge.resumedAt = null;
     await write(data);
   }
   res.json({ game: gameStateForClient(user.earnGame) });
@@ -1028,6 +1049,8 @@ app.post("/api/earn/game/flip", requireUser, async (req, res) => {
   const challenge = game?.challenge;
   if (!challenge || challenge.id !== challengeId || challenge.completed)
     return res.status(409).json({ error: "Start a new puzzle round to continue." });
+  if (!challenge.resumedAt)
+    return res.status(409).json({ error: "Resume this puzzle round before choosing a tile." });
   if (Date.now() - new Date(challenge.startedAt).getTime() > 24 * 60 * 60 * 1000)
     return res.status(410).json({ error: "This puzzle round expired. Start a new round." });
   if (!Number.isInteger(index) || index < 0 || index >= challenge.deck.length)
@@ -1057,7 +1080,10 @@ app.post("/api/earn/game/flip", requireUser, async (req, res) => {
   if (challenge.matchedIndices.length === challenge.deck.length) {
     challenge.completed = true;
     challenge.completedAt = new Date().toISOString();
-    const elapsedSeconds = Math.max(1, (Date.now() - new Date(challenge.startedAt).getTime()) / 1000);
+    const elapsedMs = Number(challenge.elapsedMs || 0) + Math.max(0, Date.now() - new Date(challenge.resumedAt).getTime());
+    challenge.elapsedMs = elapsedMs;
+    challenge.resumedAt = null;
+    const elapsedSeconds = Math.max(1, elapsedMs / 1000);
     const parSeconds = challenge.pairs * 8 + 20;
     const speedMultiplier = elapsedSeconds <= parSeconds ? 1.5 : elapsedSeconds <= parSeconds * 1.75 ? 1.25 : 1;
     const accountBalance = normalizeBalance(user, await currentMarketPrices());

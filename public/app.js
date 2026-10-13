@@ -205,7 +205,22 @@ async function submitAuth(mode) {
   }
 }
 function shell(body, tab = "dashboard") {
+  if (tab !== "earn") pausePuzzleRound();
   app.innerHTML = `<div class="app-shell"><aside class="side">${brand}<div class="menu"><button class="${tab === "dashboard" ? "active" : ""}" onclick="dashboard()">◈ &nbsp; Overview</button><button class="${tab === "earn" ? "active" : ""}" onclick="earn()">✦ &nbsp; Earn</button><button class="${tab === "activity" ? "active" : ""}" onclick="activity()">⇄ &nbsp; Activity</button><button onclick="walletModal('receive')">＋ &nbsp; Add funds</button>${me.role === "admin" ? `<button class="${tab === "admin" ? "active" : ""}" onclick="admin()">♙ &nbsp; Admin Console</button>` : ""}</div><div class="side-footer"><button class="menu-btn" onclick="logout()">↪ &nbsp; Sign out</button></div></aside><section class="content">${body}</section></div>`;
+}
+let puzzlePauseRequest = null;
+async function pausePuzzleRound() {
+  const challenge = me?.earnGame?.challenge;
+  if (!challenge || challenge.completed || !challenge.resumedAt || puzzlePauseRequest) return;
+  puzzleState.started = false;
+  clearInterval(puzzleTimer);
+  puzzlePauseRequest = api("/api/earn/game/pause", {
+    method: "POST",
+    body: JSON.stringify({ challengeId: challenge.id }),
+  }).then((response) => {
+    if (me?.earnGame) me.earnGame = response.game;
+  }).catch(() => {}).finally(() => { puzzlePauseRequest = null; });
+  await puzzlePauseRequest;
 }
 function portfolioValue(assets = [], prices = livePrices, stakes = []) {
   return (assets || []).reduce(
@@ -374,8 +389,9 @@ function dashboard() {
   startPriceRefresh();
   startTimeRefresh();
 }
-function earn() {
+function earn(resumePuzzle = false) {
   clearInterval(puzzleTimer);
+  if (!resumePuzzle && me?.earnGame?.challenge?.resumedAt) pausePuzzleRound();
   const balance = portfolioValue(me.assets, livePrices, me.stakes);
   const eligible = balance >= 2000;
   const game = me.earnGame || { level: 1, maxLevel: 18, pendingProfitUsd: 0, rewardCycleBalanceUsd: 0, payoutThresholdUsd: 0, challenge: null };
@@ -389,8 +405,9 @@ function earn() {
     matched: activeRound ? [...challenge.matchedIndices] : challenge?.completed ? [...(challenge.matchedIndices || [])] : [],
     moves: activeRound ? challenge.moves : challenge?.moves || 0,
     busy: false,
-    started: Boolean(activeRound),
-    startedAt: activeRound ? challenge.startedAt : null,
+    started: Boolean(activeRound && resumePuzzle && challenge.resumedAt),
+    startedAt: activeRound && resumePuzzle ? challenge.resumedAt : null,
+    elapsedMs: activeRound ? Number(challenge.elapsedMs || 0) : 0,
   };
   const pendingProfit = Number(game.pendingProfitUsd || 0);
   const threshold = Number(game.payoutThresholdUsd || 0);
@@ -415,11 +432,11 @@ function earn() {
     return `<article class="card position-card"><div class="position-main"><span class="token ${cls}">${icon}</span><div><b>${name} staking</b><div class="small">${formatAssetAmount(stake.amount)} ${stake.symbol} staked</div></div></div><div class="position-stat"><span>Monthly reward</span><strong>+${formatAssetAmount(monthlyReward)} ${stake.symbol}</strong></div><div class="position-stat"><span>Next reward</span><strong>${nextReward.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</strong></div><button class="outline unstake-button" onclick="unstake('${stake.id}')">Unstake</button></article>`;
   }).join("");
   shell(
-    `<header class="topbar"><div><h1>Earn</h1><p>Put your assets to work and build your Vault.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Total Vault value</div><div class="balance" id="earnBalance">${money(balance)}</div><div class="earn-status ${eligible ? "eligible" : "locked"}">${eligible ? "Available to stake" : "Locked · $2,000 minimum balance"}</div></div></section><section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Make more of your assets.</h2><p>Stake a supported asset to earn a monthly reward, or take a quick puzzle break.</p></div><span class="earn-spark">✦</span></section><div class="game-profit-card card"><div class="game-profit-head"><div><span class="eyebrow">Puzzle rewards</span><h3>Game profit balance</h3></div><span class="game-level-badge">Level ${game.level || 1} <small>/ ${game.maxLevel || 18}</small></span></div><div class="game-profit-values"><strong>${money(pendingProfit)}</strong><span>${threshold > 0 ? `of ${money(threshold)} · 5% of starting balance` : "5% of starting balance"}</span></div><div class="progress-track" role="progressbar" aria-label="Progress to game reward transfer" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.toFixed(0)}"><span style="width:${progress.toFixed(2)}%"></span></div><p class="game-profit-copy">${payoutCopy}</p></div><div class="earn-grid"><article class="card earn-task stake-offer"><div class="offer-heading"><div class="task-icon">◈</div><span class="rate-badge">10% monthly</span></div><div class="task-tag">FLEXIBLE STAKING</div><h3>Stake crypto</h3><p>Choose any supported asset and stake up to your available balance. Earn 10% of your staked amount each month, paid in the same crypto.</p><div class="task-footer"><span class="small">Unstake any time</span><button class="primary" onclick="startStaking()" ${eligible ? "" : "disabled"}>${eligible ? "Start staking" : "Unlock at $2,000"}</button></div></article><article class="card earn-task puzzle-card"><div class="offer-heading"><div class="task-icon task-icon-green">⌘</div><span class="puzzle-label">LEVEL ${challenge?.level || game.level || 1} · ${pairs} PAIRS</span></div><div class="task-tag">ONCHAIN PUZZLE</div><h3>Crypto match</h3><p>Match every pair. Each round starts at 0.05% of your balance; faster clears and higher levels increase the rate. Game profits transfer when they reach 5% of your starting balance.</p><div class="puzzle-scoreline"><span id="puzzleProgress">${challenge?.completed ? pairs : challenge?.matchedIndices?.length / 2 || 0} of ${pairs} pairs · ${challenge?.moves || 0} moves</span><span id="puzzleClock">${activeRound ? puzzleTime() : "Ready when you are"}</span></div><div class="puzzle-board" id="puzzleBoard" aria-label="Crypto matching puzzle"></div><div class="puzzle-foot"><span class="small" id="puzzleResult">${lastRoundCopy}</span><button class="outline" id="puzzleStartButton" onclick="startPuzzle()">${activeRound ? "Resume round" : challenge?.completed ? "Start next level" : "Start puzzle"}</button></div></article></div>${positions ? `<section class="active-stakes"><div class="section-heading"><div><div class="eyebrow">Your positions</div><h2>Active staking</h2></div><span class="small">${(me.stakes || []).length} position${(me.stakes || []).length === 1 ? "" : "s"}</span></div><div class="position-list">${positions}</div></section>` : ""}`,
+    `<header class="topbar"><div><h1>Earn</h1><p>Put your assets to work and build your Vault.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Total Vault value</div><div class="balance" id="earnBalance">${money(balance)}</div><div class="earn-status ${eligible ? "eligible" : "locked"}">${eligible ? "Available to stake" : "Locked · $2,000 minimum balance"}</div></div></section><section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Make more of your assets.</h2><p>Stake a supported asset to earn a monthly reward, or take a quick puzzle break.</p></div><span class="earn-spark">✦</span></section><div class="game-profit-card card"><div class="game-profit-head"><div><span class="eyebrow">Puzzle rewards</span><h3>Game profit balance</h3></div><span class="game-level-badge">Level ${game.level || 1} <small>/ ${game.maxLevel || 18}</small></span></div><div class="game-profit-values"><strong>${money(pendingProfit)}</strong><span>${threshold > 0 ? `of ${money(threshold)} · 5% of starting balance` : "5% of starting balance"}</span></div><div class="progress-track" role="progressbar" aria-label="Progress to game reward transfer" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.toFixed(0)}"><span style="width:${progress.toFixed(2)}%"></span></div><p class="game-profit-copy">${payoutCopy}</p></div><div class="earn-grid"><article class="card earn-task stake-offer"><div class="offer-heading"><div class="task-icon">◈</div><span class="rate-badge">10% monthly</span></div><div class="task-tag">FLEXIBLE STAKING</div><h3>Stake crypto</h3><p>Choose any supported asset and stake up to your available balance. Earn 10% of your staked amount each month, paid in the same crypto.</p><div class="task-footer"><span class="small">Unstake any time</span><button class="primary" onclick="startStaking()" ${eligible ? "" : "disabled"}>${eligible ? "Start staking" : "Unlock at $2,000"}</button></div></article><article class="card earn-task puzzle-card"><div class="offer-heading"><div class="task-icon task-icon-green">⌘</div><span class="puzzle-label">LEVEL ${challenge?.level || game.level || 1} · ${pairs} PAIRS</span></div><div class="task-tag">ONCHAIN PUZZLE</div><h3>Crypto match</h3><p>Match every pair. Each round starts at 0.05% of your balance; faster clears and higher levels increase the rate. Game profits transfer when they reach 5% of your starting balance.</p><div class="puzzle-scoreline"><span id="puzzleProgress">${challenge?.completed ? pairs : challenge?.matchedIndices?.length / 2 || 0} of ${pairs} pairs · ${challenge?.moves || 0} moves</span><span id="puzzleClock">${puzzleClockLabel()}</span></div><div class="puzzle-board" id="puzzleBoard" aria-label="Crypto matching puzzle"></div><div class="puzzle-foot"><span class="small" id="puzzleResult">${lastRoundCopy}</span><button class="outline" id="puzzleStartButton" onclick="startPuzzle()">${activeRound ? "Resume round" : challenge?.completed ? "Start next level" : "Start puzzle"}</button></div></article></div>${positions ? `<section class="active-stakes"><div class="section-heading"><div><div class="eyebrow">Your positions</div><h2>Active staking</h2></div><span class="small">${(me.stakes || []).length} position${(me.stakes || []).length === 1 ? "" : "s"}</span></div><div class="position-list">${positions}</div></section>` : ""}`,
     "earn",
   );
   renderPuzzle();
-  if (activeRound) startPuzzleClock();
+  if (puzzleState.started) startPuzzleClock();
   startPriceRefresh();
 }
 function stakeNextRewardDate(stake) {
@@ -489,21 +506,26 @@ let puzzleTimer = null;
 let puzzleState = { deck: [], open: [], matched: [], moves: 0, seconds: 0, busy: false, started: false };
 async function startPuzzle() {
   const button = document.getElementById("puzzleStartButton");
+  const idleLabel = me?.earnGame?.challenge && !me.earnGame.challenge.completed ? "Resume round" : me?.earnGame?.challenge?.completed ? "Start next level" : "Start puzzle";
   if (button) { button.disabled = true; button.textContent = "Loading round…"; }
   try {
+    if (puzzlePauseRequest) await puzzlePauseRequest;
     const response = await api("/api/earn/game/start", { method: "POST", body: JSON.stringify({}) });
     me.earnGame = response.game;
-    earn();
+    earn(true);
   } catch (error) {
-    if (button) { button.disabled = false; button.textContent = "Start puzzle"; }
+    if (button) { button.disabled = false; button.textContent = idleLabel; }
     showNotice(error.message);
   }
 }
 function puzzleTime() {
-  const seconds = puzzleState.startedAt
-    ? Math.max(0, Math.floor((Date.now() - new Date(puzzleState.startedAt).getTime()) / 1000))
-    : 0;
+  const elapsed = puzzleState.elapsedMs + (puzzleState.startedAt ? Date.now() - new Date(puzzleState.startedAt).getTime() : 0);
+  const seconds = Math.max(0, Math.floor(elapsed / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+function puzzleClockLabel() {
+  if (puzzleState.started) return puzzleTime();
+  return puzzleState.elapsedMs > 0 ? `${puzzleTime()} · paused` : "Ready when you are";
 }
 function startPuzzleClock() {
   clearInterval(puzzleTimer);
@@ -522,7 +544,7 @@ function renderPuzzle() {
   const progress = document.getElementById("puzzleProgress");
   if (progress) progress.textContent = `${puzzleState.matched.length / 2} pairs · ${puzzleState.moves} moves`;
   const clock = document.getElementById("puzzleClock");
-  if (clock) clock.textContent = puzzleState.started ? puzzleTime() : "Ready when you are";
+  if (clock) clock.textContent = puzzleClockLabel();
 }
 async function flipPuzzleTile(index) {
   if (!puzzleState.started || puzzleState.busy || puzzleState.open.includes(index) || puzzleState.matched.includes(index)) return;
