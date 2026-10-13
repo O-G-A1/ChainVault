@@ -1,4 +1,4 @@
-const CACHE_NAME = "onchainvault-shell-v5";
+const CACHE_NAME = "onchainvault-shell-v6";
 const APP_SHELL = ["/", "/index.html", "/style.css", "/app.js", "/icons/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -36,6 +36,27 @@ self.addEventListener("fetch", (event) => {
         const cachedPage = await caches.match("/index.html");
         return cachedPage || Response.error();
       }),
+    );
+    return;
+  }
+
+  // Always check for the latest app code and styles while online. Keep a
+  // cached copy only as an offline fallback, so deploys don't need a manual
+  // cache version bump to become visible to existing users.
+  if (["/style.css", "/app.js", "/index.html"].includes(url.pathname)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          return cached || Response.error();
+        }),
     );
     return;
   }
