@@ -205,7 +205,7 @@ async function submitAuth(mode) {
   }
 }
 function shell(body, tab = "dashboard") {
-  app.innerHTML = `<div class="app-shell"><aside class="side">${brand}<div class="menu"><button class="${tab === "dashboard" ? "active" : ""}" onclick="dashboard()">◈ &nbsp; Overview</button><button class="${tab === "activity" ? "active" : ""}" onclick="activity()">⇄ &nbsp; Activity</button><button onclick="walletModal('receive')">＋ &nbsp; Add funds</button>${me.role === "admin" ? `<button class="${tab === "admin" ? "active" : ""}" onclick="admin()">♙ &nbsp; Admin Console</button>` : ""}</div><div class="side-footer"><button class="menu-btn" onclick="logout()">↪ &nbsp; Sign out</button></div></aside><section class="content">${body}</section></div>`;
+  app.innerHTML = `<div class="app-shell"><aside class="side">${brand}<div class="menu"><button class="${tab === "dashboard" ? "active" : ""}" onclick="dashboard()">◈ &nbsp; Overview</button><button class="${tab === "earn" ? "active" : ""}" onclick="earn()">✦ &nbsp; Earn</button><button class="${tab === "activity" ? "active" : ""}" onclick="activity()">⇄ &nbsp; Activity</button><button onclick="walletModal('receive')">＋ &nbsp; Add funds</button>${me.role === "admin" ? `<button class="${tab === "admin" ? "active" : ""}" onclick="admin()">♙ &nbsp; Admin Console</button>` : ""}</div><div class="side-footer"><button class="menu-btn" onclick="logout()">↪ &nbsp; Sign out</button></div></aside><section class="content">${body}</section></div>`;
 }
 function portfolioValue(assets = [], prices = livePrices) {
   return (assets || []).reduce(
@@ -264,6 +264,11 @@ async function refreshLivePrices() {
     const total = portfolioValue(me.assets, livePrices);
     const totalElement = document.getElementById("livePortfolioValue");
     if (totalElement) totalElement.textContent = money(total);
+    const earnBalance = document.getElementById("earnBalance");
+    if (earnBalance) earnBalance.textContent = money(total);
+    const earnGate = document.querySelector("[data-earn-gate]");
+    if (earnGate && (earnGate.dataset.earnGate === "true") !== (total >= 2000))
+      earn();
     const stamp = document.getElementById("marketUpdated");
     if (stamp)
       stamp.textContent = data.stale
@@ -359,6 +364,21 @@ function dashboard() {
   );
   startPriceRefresh();
   startTimeRefresh();
+}
+function earn() {
+  const balance = portfolioValue(me.assets, livePrices);
+  const eligible = balance >= 2000;
+  shell(
+    `<header class="topbar"><div><h1>Earn</h1><p>Explore ways to put your Vault to work.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Your current balance</div><div class="balance" id="earnBalance">${money(balance)}</div></div><span class="earn-pill ${eligible ? "eligible" : "locked"}">${eligible ? "Eligible" : "Locked · $2,000 minimum"}</span></section>${eligible ? `<section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Choose a way to get started.</h2><p>Explore available tasks. Offers and rewards will be shown before you commit.</p></div><span class="earn-spark">✦</span></section><div class="earn-grid"><article class="card earn-task"><div class="task-icon">◈</div><div class="task-tag">STAKING · COMING SOON</div><h3>Stake your USDC</h3><p>Put eligible USDC toward a staking opportunity. Review the terms, lockup, and risks before committing.</p><div class="task-footer"><span class="small">Requires USDC balance</span><button class="outline" onclick="earnTaskDetails('Stake your USDC')">View details</button></div></article><article class="card earn-task"><div class="task-icon task-icon-green">✓</div><div class="task-tag">ACCOUNT TASK</div><h3>Secure your Vault</h3><p>Review your account security settings and learn how to protect access to your assets.</p><div class="task-footer"><span class="small">No funds required</span><button class="outline" onclick="earnTaskDetails('Secure your Vault')">View details</button></div></article></div><p class="earn-disclaimer">Opportunities are a preview. No funds are moved and no rewards are credited from this page yet.</p>` : `<section class="card earn-locked"><div class="locked-icon">⌑</div><h2>Build your balance to unlock Earn</h2><p>Your Vault needs a balance of at least <strong>$2,000</strong> to access earning tasks. Your current balance is ${money(balance)}.</p><button class="primary" onclick="dashboard()">View my assets</button></section>`}`,
+    "earn",
+  );
+  startPriceRefresh();
+}
+function earnTaskDetails(task) {
+  const message = task === "Stake your USDC"
+    ? "Staking is being prepared. This preview does not connect to a staking provider, move assets, or guarantee returns. Terms and any lockup will be shown before this task becomes available."
+    : "This account task is a preview. Account security actions and any reward will be confirmed before the task becomes available.";
+  inAppDialog({ title: task, message });
 }
 function activity() {
   shell(
