@@ -1334,10 +1334,6 @@ nav {
 .puzzle-tile:not(:disabled):hover { background: #25213b; }
 .puzzle-tile:not(:disabled):active { transform: scale(.95); background: #312957; }
 .puzzle-tile:disabled { cursor: default; }
-.puzzle-tile.matched { animation: puzzle-match 240ms ease-out; }
-@keyframes puzzle-match {
-  50% { transform: scale(1.06); box-shadow: 0 0 0 3px #78f5b226; }
-}
 .puzzle-foot {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1369,5 +1365,4 @@ nav {
 }
 @media (prefers-reduced-motion: reduce) {
   .puzzle-tile, .puzzle-foot #puzzleStartButton { transition: none; }
-  .puzzle-tile.matched { animation: none; }
 }
