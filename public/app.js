@@ -2,10 +2,22 @@ const app = document.querySelector("#app");
 let token = localStorage.getItem("vf_token"),
   me = null,
   users = [];
+let supportChatTimer = null;
+let supportBadgeTimer = null;
+let adminSupportInboxTimer = null;
+let adminSupportChatTimer = null;
+let adminSupportConversationId = null;
 const SESSION_IDLE_MS = 60 * 60 * 1000;
 const LAST_ACTIVITY_KEY = "vf_last_activity";
 let lastHeartbeatAt = 0;
 function clearLocalSession() {
+  [supportChatTimer, supportBadgeTimer, adminSupportInboxTimer, adminSupportChatTimer].forEach((timer) => timer && clearInterval(timer));
+  supportChatTimer = null;
+  supportBadgeTimer = null;
+  adminSupportInboxTimer = null;
+  adminSupportChatTimer = null;
+  activeSupportConversation = null;
+  adminSupportConversationId = null;
   localStorage.removeItem("vf_token");
   localStorage.removeItem(LAST_ACTIVITY_KEY);
   token = null;
@@ -206,7 +218,37 @@ async function submitAuth(mode) {
 }
 function shell(body, tab = "dashboard") {
   if (tab !== "earn") pausePuzzleRound();
-  app.innerHTML = `<div class="app-shell"><aside class="side">${brand}<div class="menu"><button class="${tab === "dashboard" ? "active" : ""}" onclick="dashboard()">◈ &nbsp; Overview</button><button class="${tab === "earn" ? "active" : ""}" onclick="earn()">✦ &nbsp; Earn</button><button class="${tab === "activity" ? "active" : ""}" onclick="activity()">⇄ &nbsp; Activity</button><button onclick="walletModal('receive')">＋ &nbsp; Add funds</button>${me.role === "admin" ? `<button class="${tab === "admin" ? "active" : ""}" onclick="admin()">♙ &nbsp; Admin Console</button>` : ""}</div><div class="side-footer"><button class="menu-btn" onclick="logout()">↪ &nbsp; Sign out</button></div></aside><section class="content">${body}</section></div>`;
+  if (tab !== "support" && supportChatTimer) {
+    clearInterval(supportChatTimer);
+    supportChatTimer = null;
+  }
+  if (tab !== "admin" && adminSupportInboxTimer) {
+    clearInterval(adminSupportInboxTimer);
+    adminSupportInboxTimer = null;
+  }
+  if (tab !== "admin" && adminSupportChatTimer) {
+    clearInterval(adminSupportChatTimer);
+    adminSupportChatTimer = null;
+    adminSupportConversationId = null;
+  }
+  app.innerHTML = `<div class="app-shell"><aside class="side">${brand}<div class="menu"><button class="${tab === "dashboard" ? "active" : ""}" onclick="dashboard()">◈ &nbsp; Overview</button><button class="${tab === "earn" ? "active" : ""}" onclick="earn()">✦ &nbsp; Earn</button><button class="${tab === "activity" ? "active" : ""}" onclick="activity()">⇄ &nbsp; Activity</button><button onclick="walletModal('receive')">＋ &nbsp; Add funds</button>${me.role === "admin" ? `<button class="${tab === "admin" ? "active" : ""}" onclick="admin()" id="adminTab">♙ &nbsp; Admin Console<span class="nav-badge" id="adminSupportBadge" hidden></span></button>` : `<button class="support-tab ${tab === "support" ? "active" : ""}" onclick="support()" id="supportTab">☏ &nbsp; Chat with support<span class="nav-badge" id="supportUnreadBadge" hidden></span></button>`}</div><div class="side-footer"><button class="menu-btn" onclick="logout()">↪ &nbsp; Sign out</button></div></aside><section class="content">${body}</section></div>`;
+  refreshSupportBadges();
+  if (!supportBadgeTimer) supportBadgeTimer = setInterval(refreshSupportBadges, 20000);
+  if (tab === "admin" && !adminSupportInboxTimer) adminSupportInboxTimer = setInterval(refreshAdminSupportInbox, 12000);
+}
+function setNavBadge(id, count) {
+  const badge = document.getElementById(id);
+  if (!badge) return;
+  badge.textContent = count > 99 ? "99+" : String(count);
+  badge.hidden = !count;
+}
+async function refreshSupportBadges() {
+  if (!token) return;
+  try {
+    const unread = await api("/api/support/unread");
+    setNavBadge("supportUnreadBadge", unread.userUnread || 0);
+    setNavBadge("adminSupportBadge", unread.adminUnread || 0);
+  } catch {}
 }
 let puzzlePauseRequest = null;
 async function pausePuzzleRound() {
@@ -221,6 +263,69 @@ async function pausePuzzleRound() {
     if (me?.earnGame) me.earnGame = response.game;
   }).catch(() => {}).finally(() => { puzzlePauseRequest = null; });
   await puzzlePauseRequest;
+}
+function supportMessageRows(messages = [], role = "user") {
+  if (!messages.length) return `<div class="support-empty"><span class="support-empty-icon">✦</span><b>How can we help?</b><p>Send a message to start a private conversation with OnchainVault support.</p></div>`;
+  return messages.map((message) => {
+    const mine = message.senderRole === role;
+    const sender = mine ? (role === "admin" ? "Support team" : "You") : (message.senderRole === "admin" ? "Support team" : escapeHtml(message.senderName || "Customer"));
+    const date = new Date(message.createdAt);
+    const timestamp = Number.isNaN(date.getTime()) ? "" : date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    return `<article class="support-message ${mine ? "mine" : "theirs"}"><div class="support-message-meta"><b>${sender}</b><time>${timestamp}</time></div><p>${escapeHtml(message.text).replace(/\n/g, "<br>")}</p></article>`;
+  }).join("");
+}
+function renderSupportMessages(containerId, messages, role, forceBottom = false) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 90;
+  container.innerHTML = supportMessageRows(messages, role);
+  if (forceBottom || nearBottom) container.scrollTop = container.scrollHeight;
+}
+let activeSupportConversation = null;
+async function support() {
+  if (supportChatTimer) clearInterval(supportChatTimer);
+  supportChatTimer = null;
+  try {
+    const response = await api("/api/support/conversation");
+    activeSupportConversation = response.conversation;
+    shell(`<header class="topbar"><div><h1>Chat with support</h1><p>Send a message and continue the conversation here.</p></div><div class="support-status"><span></span>Private support chat</div></header><section class="card support-chat"><div class="support-chat-heading"><div><b>OnchainVault support</b><span>Replies will appear in this conversation.</span></div><span class="support-live-dot" aria-label="Conversation active"></span></div><div class="support-messages" id="supportMessages" aria-live="polite"></div><form class="support-composer" onsubmit="sendSupportMessage(event)"><label class="sr-only" for="supportMessageInput">Your message</label><textarea id="supportMessageInput" maxlength="2000" rows="2" placeholder="Write a message…" required></textarea><div class="support-composer-footer"><span>Keep personal passwords and recovery phrases private.</span><button class="primary" id="supportSendButton" type="submit">Send message <span aria-hidden="true">↗</span></button></div></form></section>`, "support");
+    renderSupportMessages("supportMessages", activeSupportConversation?.messages || [], "user", true);
+    refreshSupportBadges();
+    supportChatTimer = setInterval(refreshSupportConversation, 8000);
+  } catch (error) {
+    shell(`<header class="topbar"><div><h1>Chat with support</h1><p>We couldn’t load your conversation.</p></div></header><section class="card"><p class="error">${escapeHtml(error.message)}</p><button class="primary" onclick="support()">Try again</button></section>`, "support");
+  }
+}
+async function refreshSupportConversation() {
+  if (!document.getElementById("supportMessages")) return;
+  try {
+    const response = await api("/api/support/conversation");
+    activeSupportConversation = response.conversation;
+    renderSupportMessages("supportMessages", activeSupportConversation?.messages || [], "user");
+    refreshSupportBadges();
+  } catch {}
+}
+async function sendSupportMessage(event) {
+  event.preventDefault();
+  const input = document.getElementById("supportMessageInput");
+  const button = document.getElementById("supportSendButton");
+  const text = input.value.trim();
+  if (!text) return;
+  button.disabled = true;
+  button.textContent = "Sending…";
+  try {
+    const response = await api("/api/support/messages", { method: "POST", body: JSON.stringify({ text }) });
+    activeSupportConversation = response.conversation;
+    input.value = "";
+    renderSupportMessages("supportMessages", activeSupportConversation.messages, "user", true);
+    refreshSupportBadges();
+  } catch (error) {
+    showNotice(error.message);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = 'Send message <span aria-hidden="true">↗</span>';
+    input.focus();
+  }
 }
 function portfolioValue(assets = [], prices = livePrices, stakes = []) {
   return (assets || []).reduce(
@@ -762,10 +867,11 @@ async function submitWallet(type) {
 }
 async function admin() {
   try {
-    const [allUsers, deposits, withdrawals] = await Promise.all([
+    const [allUsers, deposits, withdrawals, supportConversations] = await Promise.all([
       api("/api/admin/users"),
       api("/api/admin/deposits"),
       api("/api/admin/withdrawals"),
+      api("/api/admin/support"),
     ]);
     users = allUsers;
     const customers = users.filter((user) => user.role !== "admin");
@@ -776,11 +882,85 @@ async function admin() {
       )
       .join("");
     shell(
-      `<header class="topbar"><div><h1>Admin console</h1><p>Updates are applied only to the account you select.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header>${pendingDeposits(deposits)}${pendingWithdrawals(withdrawals)}<div class="card"><h3>All customer accounts <span class="small">(${customers.length})</span></h3><div style="overflow:auto"><table class="admin-table"><thead><tr><th>User</th><th>Portfolio</th><th>Status</th><th>Joined</th><th>Account actions</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="small">No customer accounts yet.</td></tr>'}</tbody></table></div></div>`,
+      `<header class="topbar"><div><h1>Admin console</h1><p>Updates are applied only to the account you select.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header>${adminSupportInbox(supportConversations)}${pendingDeposits(deposits)}${pendingWithdrawals(withdrawals)}<div class="card"><h3>All customer accounts <span class="small">(${customers.length})</span></h3><div style="overflow:auto"><table class="admin-table"><thead><tr><th>User</th><th>Portfolio</th><th>Status</th><th>Joined</th><th>Account actions</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="small">No customer accounts yet.</td></tr>'}</tbody></table></div></div>`,
       "admin",
     );
   } catch {
     dashboard();
+  }
+}
+function adminSupportInbox(conversations) {
+  const unread = conversations.reduce((sum, conversation) => sum + conversation.unreadCount, 0);
+  const rows = conversations.length
+    ? conversations.map((conversation) => {
+      const preview = conversation.lastMessage?.text || "No messages yet";
+      const updated = new Date(conversation.updatedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      return `<article class="support-inbox-row"><div class="support-inbox-person"><span class="support-avatar">${escapeHtml(initials(conversation.user.name))}</span><div><b>${escapeHtml(conversation.user.name)}</b><span>${escapeHtml(conversation.user.email)} · ${escapeHtml(updated)}</span></div></div><p>${escapeHtml(preview)}</p><button class="outline" onclick="openAdminSupport('${conversation.id}')">${conversation.unreadCount ? `<span class="inbox-unread">${conversation.unreadCount} new</span>` : "Open chat"} <span aria-hidden="true">→</span></button></article>`;
+    }).join("")
+    : '<p class="support-inbox-empty">No support conversations yet. New customer messages will appear here.</p>';
+  return `<section class="card support-inbox" id="adminSupportInbox"><div class="support-inbox-heading"><div><div class="eyebrow">Customer care</div><h3>Support inbox ${unread ? `<span class="support-count">${unread} unread</span>` : ""}</h3></div><span class="small">${conversations.length} conversation${conversations.length === 1 ? "" : "s"}</span></div><div class="support-inbox-list">${rows}</div></section>`;
+}
+async function refreshAdminSupportInbox() {
+  if (!document.getElementById("adminSupportInbox")) return;
+  try {
+    const conversations = await api("/api/admin/support");
+    const inbox = document.getElementById("adminSupportInbox");
+    if (inbox) inbox.outerHTML = adminSupportInbox(conversations);
+    refreshSupportBadges();
+  } catch {}
+}
+async function openAdminSupport(id) {
+  adminSupportConversationId = id;
+  try {
+    const response = await api(`/api/admin/support/${encodeURIComponent(id)}`);
+    document.getElementById("adminSupportModal")?.remove();
+    document.body.insertAdjacentHTML("beforeend", `<div class="modal-bg" id="adminSupportModal"><section class="modal support-admin-modal" role="dialog" aria-modal="true" aria-labelledby="adminSupportTitle"><div class="modal-head"><div><h2 id="adminSupportTitle">${escapeHtml(response.user.name)}</h2><div class="small">${escapeHtml(response.user.email)}</div></div><button class="close" onclick="closeAdminSupport()" aria-label="Close conversation">×</button></div><div class="support-messages admin-support-messages" id="adminSupportMessages" aria-live="polite"></div><form class="support-composer admin-support-composer" onsubmit="sendAdminSupportReply(event)"><label class="sr-only" for="adminSupportReply">Reply to customer</label><textarea id="adminSupportReply" maxlength="2000" rows="2" placeholder="Write a reply…" required></textarea><button class="primary" id="adminSupportSend" type="submit">Send reply</button></form></section></div>`);
+    renderSupportMessages("adminSupportMessages", response.conversation.messages, "admin", true);
+    refreshSupportBadges();
+    if (adminSupportChatTimer) clearInterval(adminSupportChatTimer);
+    adminSupportChatTimer = setInterval(refreshAdminSupportChat, 8000);
+    refreshAdminSupportInbox();
+  } catch (error) {
+    showNotice(error.message);
+  }
+}
+async function refreshAdminSupportChat() {
+  if (!adminSupportConversationId || !document.getElementById("adminSupportMessages")) return;
+  try {
+    const response = await api(`/api/admin/support/${encodeURIComponent(adminSupportConversationId)}`);
+    renderSupportMessages("adminSupportMessages", response.conversation.messages, "admin");
+    refreshSupportBadges();
+  } catch {}
+}
+function closeAdminSupport() {
+  document.getElementById("adminSupportModal")?.remove();
+  adminSupportConversationId = null;
+  if (adminSupportChatTimer) clearInterval(adminSupportChatTimer);
+  adminSupportChatTimer = null;
+}
+async function sendAdminSupportReply(event) {
+  event.preventDefault();
+  if (!adminSupportConversationId) return;
+  const input = document.getElementById("adminSupportReply");
+  const button = document.getElementById("adminSupportSend");
+  const text = input.value.trim();
+  if (!text) return;
+  button.disabled = true;
+  button.textContent = "Sending…";
+  try {
+    const response = await api(`/api/admin/support/${encodeURIComponent(adminSupportConversationId)}/messages`, { method: "POST", body: JSON.stringify({ text }) });
+    input.value = "";
+    renderSupportMessages("adminSupportMessages", response.conversation.messages, "admin", true);
+    const conversations = await api("/api/admin/support");
+    const inbox = document.getElementById("adminSupportInbox");
+    if (inbox) inbox.outerHTML = adminSupportInbox(conversations);
+    refreshSupportBadges();
+  } catch (error) {
+    showNotice(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Send reply";
+    input.focus();
   }
 }
 function pendingDeposits(deposits) {

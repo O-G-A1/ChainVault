@@ -77,6 +77,7 @@ const INITIAL_DATA = {
   sessions: {},
   depositRequests: [],
   withdrawalRequests: [],
+  supportConversations: [],
   users: [
     {
       id: "admin",
@@ -542,6 +543,102 @@ app.get("/api/me", requireUser, async (req, res) => {
   }
   res.json(publicUser(user));
 });
+app.get("/api/support/unread", requireUser, async (req, res) => {
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.userId);
+  const conversations = data.supportConversations || [];
+  if (user?.role === "admin") {
+    const adminUnread = conversations.reduce((sum, conversation) => sum + conversation.messages.filter((message) => message.senderRole === "user" && !message.readByAdmin).length, 0);
+    return res.json({ userUnread: 0, adminUnread });
+  }
+  const conversation = conversations.find((entry) => entry.userId === req.userId);
+  const userUnread = (conversation?.messages || []).filter((message) => message.senderRole === "admin" && !message.readByUser).length;
+  res.json({ userUnread, adminUnread: 0 });
+});
+app.get("/api/support/conversation", requireUser, async (req, res) => {
+  const data = await read();
+  data.supportConversations ||= [];
+  const conversation = data.supportConversations.find((entry) => entry.userId === req.userId) || null;
+  let changed = false;
+  (conversation?.messages || []).forEach((message) => {
+    if (message.senderRole === "admin" && !message.readByUser) {
+      message.readByUser = true;
+      changed = true;
+    }
+  });
+  if (changed) await write(data);
+  res.json({ conversation });
+});
+app.post("/api/support/messages", requireUser, async (req, res) => {
+  const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
+  if (!text || text.length > 2000)
+    return res.status(400).json({ error: "Write a message of up to 2,000 characters." });
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.userId);
+  data.supportConversations ||= [];
+  let conversation = data.supportConversations.find((entry) => entry.userId === req.userId);
+  const now = new Date().toISOString();
+  if (!conversation) {
+    conversation = { id: id(), userId: user.id, createdAt: now, updatedAt: now, messages: [] };
+    data.supportConversations.push(conversation);
+  }
+  conversation.messages.push({
+    id: id(), senderId: user.id, senderRole: "user", senderName: user.name,
+    text, createdAt: now, readByUser: true, readByAdmin: false,
+  });
+  conversation.updatedAt = now;
+  await write(data);
+  res.json({ conversation });
+});
+app.get("/api/admin/support", requireAdmin, async (_req, res) => {
+  const data = await read();
+  const conversations = (data.supportConversations || []).map((conversation) => {
+    const user = data.users.find((entry) => entry.id === conversation.userId);
+    const lastMessage = conversation.messages.at(-1) || null;
+    return {
+      id: conversation.id,
+      userId: conversation.userId,
+      user: user ? { name: user.name, email: user.email } : { name: "Deleted account", email: "" },
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
+      lastMessage: lastMessage ? { text: lastMessage.text, senderRole: lastMessage.senderRole, createdAt: lastMessage.createdAt } : null,
+      unreadCount: conversation.messages.filter((message) => message.senderRole === "user" && !message.readByAdmin).length,
+    };
+  }).sort((left, right) => new Date(right.updatedAt) - new Date(left.updatedAt));
+  res.json(conversations);
+});
+app.get("/api/admin/support/:id", requireAdmin, async (req, res) => {
+  const data = await read();
+  const conversation = (data.supportConversations || []).find((entry) => entry.id === req.params.id);
+  if (!conversation) return res.status(404).json({ error: "Support conversation not found." });
+  let changed = false;
+  conversation.messages.forEach((message) => {
+    if (message.senderRole === "user" && !message.readByAdmin) {
+      message.readByAdmin = true;
+      changed = true;
+    }
+  });
+  if (changed) await write(data);
+  const user = data.users.find((entry) => entry.id === conversation.userId);
+  res.json({ conversation, user: user ? { name: user.name, email: user.email } : { name: "Deleted account", email: "" } });
+});
+app.post("/api/admin/support/:id/messages", requireAdmin, async (req, res) => {
+  const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
+  if (!text || text.length > 2000)
+    return res.status(400).json({ error: "Write a message of up to 2,000 characters." });
+  const data = await read();
+  const conversation = (data.supportConversations || []).find((entry) => entry.id === req.params.id);
+  if (!conversation) return res.status(404).json({ error: "Support conversation not found." });
+  const admin = data.users.find((entry) => entry.id === req.userId);
+  const now = new Date().toISOString();
+  conversation.messages.push({
+    id: id(), senderId: admin.id, senderRole: "admin", senderName: admin.name,
+    text, createdAt: now, readByUser: false, readByAdmin: true,
+  });
+  conversation.updatedAt = now;
+  await write(data);
+  res.json({ conversation });
+});
 app.get("/api/market/prices", async (req, res) =>
   res.json(await currentMarketPrices()),
 );
@@ -570,6 +667,9 @@ app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
   );
   data.withdrawalRequests = data.withdrawalRequests.filter(
     (request) => request.userId !== req.params.id,
+  );
+  data.supportConversations = (data.supportConversations || []).filter(
+    (conversation) => conversation.userId !== req.params.id,
   );
   await write(data);
   res.json({ ok: true });
