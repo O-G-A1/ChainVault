@@ -21,7 +21,9 @@ body {
     sans-serif;
 }
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
 }
 button {
@@ -258,6 +260,27 @@ nav {
 .rate-badge, .puzzle-label { padding: 7px 10px; border: 1px solid #345746; border-radius: 999px; background: #153427; color: #8af0b8; font-size: 11px; font-weight: 700; }
 .puzzle-label { border-color: #3c365b; background: #25213b; color: #c4baff; }
 .earn-task button:disabled { cursor: not-allowed; opacity: .6; }
+.game-profit-card { margin: 0 0 18px; padding: 20px 22px; }
+.game-profit-head, .game-profit-values { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.game-profit-head h3 { margin: 6px 0 0; font: 600 19px "Space Grotesk"; }
+.game-level-badge { padding: 8px 11px; border: 1px solid #423a65; border-radius: 10px; background: #231f38; color: #d4ccff; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.game-level-badge small { color: #a9a0d1; }
+.game-profit-values { justify-content: flex-start; margin: 17px 0 10px; }
+.game-profit-values strong { font: 600 24px "Space Grotesk"; font-variant-numeric: tabular-nums; }
+.game-profit-values span, .game-profit-copy { color: var(--muted); font-size: 12px; }
+.progress-track { height: 7px; overflow: hidden; border-radius: 9px; background: #252b39; }
+.progress-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7160ee, #8cf1b9); transition: width 250ms ease; }
+.game-profit-copy { margin: 10px 0 0; line-height: 1.5; }
+.puzzle-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-top: auto; }
+.puzzle-foot .small { line-height: 1.45; }
+.admin-bonus-panel { margin-top: 24px; padding: 16px; border: 1px solid #333b4d; border-radius: 13px; background: #0d131e; }
+.bonus-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.bonus-heading strong { font-size: 14px; }
+.bonus-heading p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.bonus-icon { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 10px; color: var(--green); background: #163527; font-size: 20px; }
+.admin-bonus-panel textarea { min-height: 76px; resize: vertical; }
+.field-help { margin-top: 7px; }
+.admin-user-modal .danger { margin-top: 10px; }
 .active-stakes { margin-top: 36px; }
 .active-stakes .section-heading { margin-bottom: 14px; }
 .active-stakes .section-heading h2 { margin: 6px 0 0; font: 600 23px "Space Grotesk"; }

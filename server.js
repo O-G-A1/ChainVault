@@ -189,6 +189,10 @@ const initializeData = () => {
             user.stakes = [];
             changed = true;
           }
+          if (!user.earnGame) {
+            user.earnGame = { level: 1, pendingProfitUsd: 0, rewardCycleBalanceUsd: 0, challenge: null };
+            changed = true;
+          }
           if (Array.isArray(user.assets)) {
             const computed = normalizeBalance({ ...user, assets: user.assets });
             if (Math.abs((Number(user.balance) || 0) - computed) >= 0.01) {
@@ -374,6 +378,41 @@ const processMaturedStakes = (user, market) => {
   if (changed) refreshBalanceAtMarket(user, market);
   return changed;
 };
+const GAME_SYMBOLS = ["₿", "◆", "$", "₮", "⬡", "◈", "Ξ", "◎", "◉", "◇", "△", "⬢", "✦", "◌", "▣", "⬟", "⟠", "◍"];
+const MAX_GAME_LEVEL = 18;
+const gameStateForClient = (game) => ({
+  level: game.level,
+  maxLevel: MAX_GAME_LEVEL,
+  pendingProfitUsd: Number(game.pendingProfitUsd || 0),
+  rewardCycleBalanceUsd: Number(game.rewardCycleBalanceUsd || 0),
+  payoutThresholdUsd: Number(game.rewardCycleBalanceUsd || 0) * 0.05,
+  challenge: game.challenge
+    ? {
+        id: game.challenge.id,
+        level: game.challenge.level,
+        pairs: game.challenge.pairs,
+        moves: game.challenge.moves,
+        matchedIndices: game.challenge.matchedIndices,
+        openIndices: game.challenge.openIndices,
+        visibleCards: game.challenge.deck.map((symbol, index) =>
+          game.challenge.matchedIndices.includes(index) || game.challenge.openIndices.includes(index)
+            ? symbol
+            : null,
+        ),
+        completed: game.challenge.completed,
+        startedAt: game.challenge.startedAt,
+        lastReward: game.lastReward || null,
+      }
+    : null,
+});
+const makeGameDeck = (pairs) => {
+  const deck = GAME_SYMBOLS.slice(0, pairs).flatMap((symbol) => [symbol, symbol]);
+  for (let index = deck.length - 1; index > 0; index -= 1) {
+    const swapIndex = crypto.randomInt(index + 1);
+    [deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]];
+  }
+  return deck;
+};
 const escapeHtml = (value) =>
   String(value).replace(
     /[&<>'"]/g,
@@ -482,6 +521,8 @@ app.post("/api/auth/heartbeat", requireUser, (_req, res) => {
 const publicUser = ({ password, ...user }) => {
   const safeUser = { ...user };
   if (Array.isArray(safeUser.assets)) normalizeBalance(safeUser);
+  safeUser.earnGame ||= { level: 1, pendingProfitUsd: 0, rewardCycleBalanceUsd: 0, challenge: null };
+  safeUser.earnGame = gameStateForClient(safeUser.earnGame);
   return safeUser;
 };
 app.get("/api/me", requireUser, async (req, res) => {
@@ -613,6 +654,56 @@ app.post("/api/admin/users/:id/funds", requireAdmin, async (req, res) => {
   addTransaction(user, {
     title: "Recovered funds",
     subtitle: "anti-fraud recovery",
+    asset: "USDC",
+    amount: `+${amount.toFixed(2)}`,
+    value: moneyValue(amount),
+    status: "completed",
+  });
+  await write(data);
+  res.json(publicUser(user));
+});
+app.post("/api/admin/users/:id/bonus", requireAdmin, async (req, res) => {
+  const amount = Number(req.body.amount);
+  const reason = typeof req.body.reason === "string" ? req.body.reason.trim() : "";
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.params.id);
+  if (!user) return res.status(404).json({ error: "User not found." });
+  if (!Number.isFinite(amount) || amount < 0.01 || amount > 1_000_000)
+    return res.status(400).json({ error: "Enter a bonus amount between $0.01 and $1,000,000." });
+  if (reason.length < 3 || reason.length > 250)
+    return res.status(400).json({ error: "Enter a reason between 3 and 250 characters." });
+
+  const stablecoin = ensureAsset(user, "USDC");
+  stablecoin.amount = Number((Number(stablecoin.amount || 0) + amount).toFixed(2));
+  refreshBalance(user);
+  addTransaction(user, {
+    title: "Admin bonus",
+    subtitle: reason,
+    asset: "USDC",
+    amount: `+${amount.toFixed(2)}`,
+    value: moneyValue(amount),
+    status: "completed",
+  });
+  await write(data);
+  res.json(publicUser(user));
+});
+app.post("/api/admin/users/:id/bonus", requireAdmin, async (req, res) => {
+  const amount = Number(req.body.amount);
+  const reason = typeof req.body.reason === "string" ? req.body.reason.trim() : "";
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.params.id);
+  if (!user) return res.status(404).json({ error: "User not found." });
+  if (!Number.isFinite(amount) || amount < 0.01 || amount > 1_000_000)
+    return res.status(400).json({ error: "Enter a bonus amount between $0.01 and $1,000,000." });
+  if (reason.length < 3 || reason.length > 250)
+    return res.status(400).json({ error: "Enter a reason between 3 and 250 characters." });
+
+  const stablecoin = ensureAsset(user, "USDC");
+  stablecoin.amount = Number((Number(stablecoin.amount || 0) + amount).toFixed(2));
+  refreshBalance(user);
+  addTransaction(user, {
+    title: "Admin bonus",
+    subtitle: reason,
     asset: "USDC",
     amount: `+${amount.toFixed(2)}`,
     value: moneyValue(amount),
@@ -926,6 +1017,126 @@ app.delete("/api/earn/stakes/:id", requireUser, async (req, res) => {
   });
   await write(data);
   res.json(publicUser(user));
+});
+app.post("/api/earn/game/start", requireUser, async (req, res) => {
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.userId);
+  user.earnGame ||= { level: 1, pendingProfitUsd: 0, rewardCycleBalanceUsd: 0, challenge: null };
+  let challenge = user.earnGame.challenge;
+  const expired = challenge && Date.now() - new Date(challenge.startedAt).getTime() > 24 * 60 * 60 * 1000;
+  if (!challenge || challenge.completed || expired) {
+    const level = Math.max(1, Math.min(MAX_GAME_LEVEL, Number(user.earnGame.level) || 1));
+    const pairs = Math.min(GAME_SYMBOLS.length, 6 + level - 1);
+    challenge = {
+      id: id(),
+      level,
+      pairs,
+      deck: makeGameDeck(pairs),
+      moves: 0,
+      matchedIndices: [],
+      openIndices: [],
+      lockUntil: 0,
+      startedAt: new Date().toISOString(),
+      completed: false,
+    };
+    user.earnGame.challenge = challenge;
+    await write(data);
+  }
+  res.json({ game: gameStateForClient(user.earnGame) });
+});
+app.post("/api/earn/game/flip", requireUser, async (req, res) => {
+  const { challengeId } = req.body;
+  const index = Number(req.body.index);
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.userId);
+  const game = user.earnGame;
+  const challenge = game?.challenge;
+  if (!challenge || challenge.id !== challengeId || challenge.completed)
+    return res.status(409).json({ error: "Start a new puzzle round to continue." });
+  if (Date.now() - new Date(challenge.startedAt).getTime() > 24 * 60 * 60 * 1000)
+    return res.status(410).json({ error: "This puzzle round expired. Start a new round." });
+  if (!Number.isInteger(index) || index < 0 || index >= challenge.deck.length)
+    return res.status(400).json({ error: "Choose a valid puzzle tile." });
+  if (challenge.lockUntil > Date.now())
+    return res.status(429).json({ error: "Wait for the tiles to turn over before choosing again." });
+  if (challenge.matchedIndices.includes(index) || challenge.openIndices.includes(index))
+    return res.status(400).json({ error: "That tile is already open." });
+
+  if (challenge.openIndices.length === 0) {
+    challenge.openIndices = [index];
+    await write(data);
+    return res.json({
+      selected: { index, symbol: challenge.deck[index] },
+      game: gameStateForClient(game),
+    });
+  }
+
+  const firstIndex = challenge.openIndices[0];
+  const match = challenge.deck[firstIndex] === challenge.deck[index];
+  challenge.openIndices = [];
+  challenge.moves += 1;
+  if (match) challenge.matchedIndices.push(firstIndex, index);
+  else challenge.lockUntil = Date.now() + 750;
+
+  let result = null;
+  if (challenge.matchedIndices.length === challenge.deck.length) {
+    challenge.completed = true;
+    challenge.completedAt = new Date().toISOString();
+    const elapsedSeconds = Math.max(1, (Date.now() - new Date(challenge.startedAt).getTime()) / 1000);
+    const parSeconds = challenge.pairs * 8 + 20;
+    const speedMultiplier = elapsedSeconds <= parSeconds ? 1.5 : elapsedSeconds <= parSeconds * 1.75 ? 1.25 : 1;
+    const accountBalance = normalizeBalance(user, await currentMarketPrices());
+    let rewardUsd = 0;
+    let payoutUsd = 0;
+    let rewardRatePercent = 0;
+    if (accountBalance > 0) {
+      if (!(Number(game.rewardCycleBalanceUsd) > 0)) game.rewardCycleBalanceUsd = accountBalance;
+      const cycleCap = Number(game.rewardCycleBalanceUsd) * 0.05;
+      rewardRatePercent = 0.05 * challenge.level * speedMultiplier;
+      rewardUsd = Number((Number(game.rewardCycleBalanceUsd) * rewardRatePercent / 100).toFixed(8));
+      game.pendingProfitUsd = Number(Math.min(cycleCap, Number(game.pendingProfitUsd || 0) + rewardUsd).toFixed(8));
+      if (game.pendingProfitUsd + 1e-8 >= cycleCap) {
+        payoutUsd = Number(cycleCap.toFixed(8));
+        const stablecoin = ensureAsset(user, "USDC");
+        stablecoin.amount = Number((Number(stablecoin.amount || 0) + payoutUsd).toFixed(8));
+        game.pendingProfitUsd = 0;
+        refreshBalanceAtMarket(user, await currentMarketPrices());
+        addTransaction(user, {
+          title: "Puzzle game reward",
+          subtitle: "Game profit threshold reached · credited to USDC",
+          asset: "USDC",
+          amount: `+${payoutUsd.toFixed(8)}`,
+          value: moneyValue(payoutUsd),
+          status: "completed",
+        });
+        game.rewardCycleBalanceUsd = Number(user.balance || 0);
+      }
+    }
+    game.level = Math.min(MAX_GAME_LEVEL, challenge.level + 1);
+    game.lastReward = {
+      level: challenge.level,
+      elapsedSeconds: Number(elapsedSeconds.toFixed(1)),
+      speedMultiplier,
+      rewardRatePercent,
+      rewardUsd,
+      pendingProfitUsd: Number(game.pendingProfitUsd || 0),
+      payoutThresholdUsd: Number(game.rewardCycleBalanceUsd || 0) * 0.05,
+      payoutUsd,
+      completedAt: challenge.completedAt,
+    };
+    result = game.lastReward;
+  }
+  await write(data);
+  res.json({
+    revealed: [
+      { index: firstIndex, symbol: challenge.deck[firstIndex] },
+      { index, symbol: challenge.deck[index] },
+    ],
+    match,
+    game: gameStateForClient(game),
+    result,
+    ...(challenge.completed ? { user: publicUser(user) } : {}),
+  });
 });
 const moneyValue = (value) =>
   `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
