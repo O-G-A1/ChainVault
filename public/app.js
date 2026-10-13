@@ -217,7 +217,7 @@ async function submitAuth(mode) {
   }
 }
 function shell(body, tab = "dashboard") {
-  if (tab !== "earn") pausePuzzleRound();
+  if (tab !== "earn") clearInterval(puzzleTimer);
   if (tab !== "support" && supportChatTimer) {
     clearInterval(supportChatTimer);
     supportChatTimer = null;
@@ -249,20 +249,6 @@ async function refreshSupportBadges() {
     setNavBadge("supportUnreadBadge", unread.userUnread || 0);
     setNavBadge("adminSupportBadge", unread.adminUnread || 0);
   } catch {}
-}
-let puzzlePauseRequest = null;
-async function pausePuzzleRound() {
-  const challenge = me?.earnGame?.challenge;
-  if (!challenge || challenge.completed || !challenge.resumedAt || puzzlePauseRequest) return;
-  puzzleState.started = false;
-  clearInterval(puzzleTimer);
-  puzzlePauseRequest = api("/api/earn/game/pause", {
-    method: "POST",
-    body: JSON.stringify({ challengeId: challenge.id }),
-  }).then((response) => {
-    if (me?.earnGame) me.earnGame = response.game;
-  }).catch(() => {}).finally(() => { puzzlePauseRequest = null; });
-  await puzzlePauseRequest;
 }
 function supportMessageRows(messages = [], role = "user") {
   if (!messages.length) return `<div class="support-empty"><span class="support-empty-icon">✦</span><b>How can we help?</b><p>Send a message to start a private conversation with OnchainVault support.</p></div>`;
@@ -498,14 +484,13 @@ function gamePairsForLevel(level) {
   if (level <= 1) return 6;
   return Math.min(50, Math.round(16 + ((level - 2) / 48) * 34));
 }
-function earn(resumePuzzle = false) {
+function earn() {
   clearInterval(puzzleTimer);
-  if (!resumePuzzle && me?.earnGame?.challenge?.resumedAt) pausePuzzleRound();
   const balance = portfolioValue(me.assets, livePrices, me.stakes);
   const eligible = balance >= 2000;
   const game = me.earnGame || { level: 1, maxLevel: 50, pendingProfitUsd: 0, rewardCycleBalanceUsd: 0, payoutThresholdUsd: 0, challenge: null };
   const challenge = game.challenge;
-  const activeRound = challenge && !challenge.completed;
+  const activeRound = challenge && !challenge.completed && !challenge.abandoned;
   const pairs = challenge?.pairs || gamePairsForLevel(game.level || 1);
   puzzleState = {
     challengeId: activeRound ? challenge.id : null,
@@ -514,8 +499,8 @@ function earn(resumePuzzle = false) {
     matched: activeRound ? [...challenge.matchedIndices] : challenge?.completed ? [...(challenge.matchedIndices || [])] : [],
     moves: activeRound ? challenge.moves : challenge?.moves || 0,
     busy: false,
-    started: Boolean(activeRound && resumePuzzle && challenge.resumedAt),
-    startedAt: activeRound && resumePuzzle ? challenge.resumedAt : null,
+    started: Boolean(activeRound && challenge.resumedAt),
+    startedAt: activeRound ? challenge.resumedAt : null,
     elapsedMs: activeRound ? Number(challenge.elapsedMs || 0) : 0,
   };
   const pendingProfit = Number(game.pendingProfitUsd || 0);
@@ -529,6 +514,8 @@ function earn(resumePuzzle = false) {
   const lastReward = game.lastReward;
   const lastRoundCopy = activeRound
     ? "Round in progress · find every matching pair."
+    : challenge?.abandoned
+      ? `Round ${challenge.level} quit · no reward earned. Start again at this level.`
     : challenge?.completed && lastReward
       ? lastReward.rewardUsd > 0
         ? `Round ${lastReward.level} · ${lastReward.elapsedSeconds}s · ${lastReward.moves} moves · ${lastReward.rewardRatePercent.toFixed(3)}% rate · ${lastReward.payoutUsd > 0 ? `${money(lastReward.payoutUsd)} transferred to your balance.` : `${money(lastReward.rewardUsd)} added to game profits.`}`
@@ -542,7 +529,10 @@ function earn(resumePuzzle = false) {
   }).join("");
   const totalStakedValue = (me.stakes || []).reduce((sum, stake) => sum + Number(stake.amount || 0) * (livePrices[stake.symbol]?.usd || 0), 0);
   const stakingSection = `<section class="earn-section staking-section"><div class="earn-section-heading"><div><div class="eyebrow">Flexible staking</div><h2>Stake crypto</h2><p>Earn 10% monthly on supported assets. Rewards are paid in the same crypto.</p></div><div class="earn-section-value"><span>Current staked value</span><strong>${money(totalStakedValue)}</strong></div></div><div class="earn-grid"><article class="card earn-task stake-offer"><div class="offer-heading"><div class="task-icon">◈</div><span class="rate-badge">10% monthly</span></div><div class="task-tag">FLEXIBLE STAKING</div><h3>Choose an asset to stake</h3><p>Stake available crypto from your balance and track each position’s next monthly reward.</p><div class="task-footer"><span class="small">Unstake any time</span><button class="primary" onclick="startStaking()" ${eligible ? "" : "disabled"}>${eligible ? "Start staking" : "Unlock at $2,000"}</button></div></article></div>${positions ? `<div class="active-stakes"><div class="section-heading"><div><div class="eyebrow">Your positions</div><h2>Active staking</h2></div><span class="small">${(me.stakes || []).length} position${(me.stakes || []).length === 1 ? "" : "s"}</span></div><div class="position-list">${positions}</div></div>` : `<p class="earn-empty-state">Your active staking positions will appear here.</p>`}</section>`;
-  const gameSection = `<section class="earn-section game-section"><div class="earn-section-heading"><div><div class="eyebrow">Puzzle rewards</div><h2>Crypto match</h2><p>Complete level 1 to unlock a 16-pair puzzle. Later levels add pairs until the 50-pair cap.</p></div><div class="game-level-badge">Level ${game.level || 1} <small>/ ${game.maxLevel || 50}</small></div></div><div class="game-profit-card card"><div class="game-profit-head"><div><span class="eyebrow">Game profit balance</span><h3>${money(pendingProfit)}</h3></div><span class="small">${threshold > 0 ? `of ${money(threshold)}` : "5% payout target"}</span></div><div class="progress-track" role="progressbar" aria-label="Progress to game reward transfer" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.toFixed(0)}"><span style="width:${progress.toFixed(2)}%"></span></div><p class="game-profit-copy">${payoutCopy}</p></div><div class="earn-grid"><article class="card earn-task puzzle-card"><div class="offer-heading"><div class="task-icon task-icon-green">⌘</div><span class="puzzle-label">LEVEL ${challenge?.level || game.level || 1} · ${pairs} PAIRS</span></div><div class="task-tag">ONCHAIN PUZZLE</div><h3>Match the crypto tiles</h3><p>Each round starts at 0.05% of your balance. Faster rounds with fewer moves earn a higher rate; slower rounds and extra moves reduce it. Higher levels increase the base rate. Game profits transfer when they reach 5% of your starting balance.</p><div class="puzzle-scoreline"><span id="puzzleProgress">${challenge?.completed ? pairs : challenge?.matchedIndices?.length / 2 || 0} of ${pairs} pairs · ${challenge?.moves || 0} moves</span><span id="puzzleClock">${puzzleClockLabel()}</span></div><div class="puzzle-board" id="puzzleBoard" aria-label="Crypto matching puzzle"></div><div class="puzzle-foot"><span class="small" id="puzzleResult">${lastRoundCopy}</span><button class="outline" id="puzzleStartButton" onclick="startPuzzle()">${activeRound ? "Resume round" : challenge?.completed ? "Start next level" : "Start puzzle"}</button></div></article></div></section>`;
+  const puzzleAction = activeRound && puzzleState.started
+    ? `<button class="outline quit-puzzle-button" id="puzzleQuitButton" onclick="quitPuzzleRound()">Quit round</button>`
+    : `<button class="outline" id="puzzleStartButton" onclick="startPuzzle()">${activeRound ? "Resume round" : challenge?.completed ? "Start next level" : challenge?.abandoned ? "Start new round" : "Start puzzle"}</button>`;
+  const gameSection = `<section class="earn-section game-section"><div class="earn-section-heading"><div><div class="eyebrow">Puzzle rewards</div><h2>Crypto match</h2><p>Complete level 1 to unlock a 16-pair puzzle. Later levels add pairs until the 50-pair cap.</p></div><div class="game-level-badge">Level ${game.level || 1} <small>/ ${game.maxLevel || 50}</small></div></div><div class="game-profit-card card"><div class="game-profit-head"><div><span class="eyebrow">Game profit balance</span><h3>${money(pendingProfit)}</h3></div><span class="small">${threshold > 0 ? `of ${money(threshold)}` : "5% payout target"}</span></div><div class="progress-track" role="progressbar" aria-label="Progress to game reward transfer" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.toFixed(0)}"><span style="width:${progress.toFixed(2)}%"></span></div><p class="game-profit-copy">${payoutCopy}</p></div><div class="earn-grid"><article class="card earn-task puzzle-card"><div class="offer-heading"><div class="task-icon task-icon-green">⌘</div><span class="puzzle-label">LEVEL ${challenge?.level || game.level || 1} · ${pairs} PAIRS</span></div><div class="task-tag">ONCHAIN PUZZLE</div><h3>Match the crypto tiles</h3><p>Each round starts at 0.05% of your balance. Faster rounds with fewer moves earn a higher rate; slower rounds and extra moves reduce it. Higher levels increase the base rate. Game profits transfer when they reach 5% of your starting balance.</p><div class="puzzle-scoreline"><span id="puzzleProgress">${challenge?.completed ? pairs : challenge?.matchedIndices?.length / 2 || 0} of ${pairs} pairs · ${challenge?.moves || 0} moves</span><span id="puzzleClock">${puzzleClockLabel()}</span></div><div class="puzzle-board" id="puzzleBoard" aria-label="Crypto matching puzzle"></div><div class="puzzle-foot"><span class="small" id="puzzleResult">${lastRoundCopy}</span>${puzzleAction}</div></article></div></section>`;
   shell(
     `<header class="topbar"><div><h1>Earn</h1><p>Put your assets to work and build your Vault.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Total Vault value</div><div class="balance" id="earnBalance">${money(balance)}</div><div class="earn-status ${eligible ? "eligible" : "locked"}">${eligible ? "Available to stake" : "Locked · $2,000 minimum balance"}</div></div></section><section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Make more of your assets.</h2><p>Choose an earning path below. Both stay together in your Earn dashboard.</p></div><span class="earn-spark">✦</span></section>${stakingSection}${gameSection}`,
     "earn",
@@ -618,15 +608,36 @@ let puzzleTimer = null;
 let puzzleState = { deck: [], open: [], matched: [], moves: 0, seconds: 0, busy: false, started: false };
 async function startPuzzle() {
   const button = document.getElementById("puzzleStartButton");
-  const idleLabel = me?.earnGame?.challenge && !me.earnGame.challenge.completed ? "Resume round" : me?.earnGame?.challenge?.completed ? "Start next level" : "Start puzzle";
+  const idleLabel = me?.earnGame?.challenge && !me.earnGame.challenge.completed && !me.earnGame.challenge.abandoned ? "Resume round" : me?.earnGame?.challenge?.completed ? "Start next level" : me?.earnGame?.challenge?.abandoned ? "Start new round" : "Start puzzle";
   if (button) { button.disabled = true; button.textContent = "Loading round…"; }
   try {
-    if (puzzlePauseRequest) await puzzlePauseRequest;
     const response = await api("/api/earn/game/start", { method: "POST", body: JSON.stringify({}) });
     me.earnGame = response.game;
-    earn(true);
+    earn();
   } catch (error) {
     if (button) { button.disabled = false; button.textContent = idleLabel; }
+    showNotice(error.message);
+  }
+}
+async function quitPuzzleRound() {
+  const confirmed = await inAppDialog({
+    title: "Quit this puzzle?",
+    message: "Quitting forfeits this round and any reward. Your current level will stay the same.",
+    confirmLabel: "Quit round",
+    cancelLabel: "Keep playing",
+  });
+  if (!confirmed) return;
+  const button = document.getElementById("puzzleQuitButton");
+  if (button) { button.disabled = true; button.textContent = "Quitting…"; }
+  try {
+    const response = await api("/api/earn/game/quit", {
+      method: "POST",
+      body: JSON.stringify({ challengeId: puzzleState.challengeId }),
+    });
+    me = response.user;
+    earn();
+  } catch (error) {
+    if (button) { button.disabled = false; button.textContent = "Quit round"; }
     showNotice(error.message);
   }
 }
@@ -637,7 +648,7 @@ function puzzleTime() {
 }
 function puzzleClockLabel() {
   if (puzzleState.started) return puzzleTime();
-  return puzzleState.elapsedMs > 0 ? `${puzzleTime()} · paused` : "Ready when you are";
+  return puzzleState.elapsedMs > 0 ? puzzleTime() : "Ready when you are";
 }
 function startPuzzleClock() {
   clearInterval(puzzleTimer);

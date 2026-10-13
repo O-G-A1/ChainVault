@@ -1353,6 +1353,20 @@ nav {
 .puzzle-foot #puzzleStartButton:not(:disabled):hover { border-color: #8170ed; background: #292443; }
 .puzzle-foot #puzzleStartButton:not(:disabled):active { transform: translateY(1px); }
 .puzzle-foot #puzzleStartButton:disabled { cursor: progress; }
+.puzzle-foot .quit-puzzle-button {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 16px;
+  border: 1px solid #61404a;
+  border-radius: 10px;
+  color: #ffc3ca;
+  background: #24191e;
+  font-weight: 700;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+.puzzle-foot .quit-puzzle-button:not(:disabled):hover { border-color: #a05a69; background: #302027; }
+.puzzle-foot .quit-puzzle-button:not(:disabled):active { transform: translateY(1px); }
+.puzzle-foot .quit-puzzle-button:disabled { cursor: progress; }
 @media (max-width: 800px) {
   .puzzle-board { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .puzzle-card > p { max-width: none; }
@@ -1364,7 +1378,7 @@ nav {
   .puzzle-foot { margin-top: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .puzzle-tile, .puzzle-foot #puzzleStartButton { transition: none; }
+  .puzzle-tile, .puzzle-foot #puzzleStartButton, .puzzle-foot .quit-puzzle-button { transition: none; }
 }
 
 .earn-section { display: grid; gap: 18px; }

@@ -404,6 +404,7 @@ const gameStateForClient = (game) => ({
             : null,
         ),
         completed: game.challenge.completed,
+        abandoned: Boolean(game.challenge.abandoned),
         startedAt: game.challenge.startedAt,
         resumedAt: game.challenge.resumedAt || null,
         elapsedMs: Number(game.challenge.elapsedMs || 0),
@@ -1104,7 +1105,7 @@ app.post("/api/earn/game/start", requireUser, async (req, res) => {
   user.earnGame ||= { level: 1, pendingProfitUsd: 0, rewardCycleBalanceUsd: 0, challenge: null };
   let challenge = user.earnGame.challenge;
   const expired = challenge && Date.now() - new Date(challenge.startedAt).getTime() > 24 * 60 * 60 * 1000;
-  if (!challenge || challenge.completed || expired) {
+  if (!challenge || challenge.completed || challenge.abandoned || expired) {
     const level = Math.max(1, Math.min(MAX_GAME_LEVEL, Number(user.earnGame.level) || 1));
     const pairs = gamePairsForLevel(level);
     challenge = {
@@ -1130,18 +1131,20 @@ app.post("/api/earn/game/start", requireUser, async (req, res) => {
   }
   res.json({ game: gameStateForClient(user.earnGame) });
 });
-app.post("/api/earn/game/pause", requireUser, async (req, res) => {
+app.post("/api/earn/game/quit", requireUser, async (req, res) => {
   const data = await read();
   const user = data.users.find((entry) => entry.id === req.userId);
   const challenge = user?.earnGame?.challenge;
-  if (!challenge || challenge.id !== req.body.challengeId || challenge.completed)
+  if (!challenge || challenge.id !== req.body.challengeId || challenge.completed || challenge.abandoned)
     return res.status(409).json({ error: "This puzzle round is no longer active." });
   if (challenge.resumedAt) {
     challenge.elapsedMs = Number(challenge.elapsedMs || 0) + Math.max(0, Date.now() - new Date(challenge.resumedAt).getTime());
-    challenge.resumedAt = null;
-    await write(data);
   }
-  res.json({ game: gameStateForClient(user.earnGame) });
+  challenge.resumedAt = null;
+  challenge.abandoned = true;
+  challenge.abandonedAt = new Date().toISOString();
+  await write(data);
+  res.json({ user: publicUser(user) });
 });
 app.post("/api/earn/game/flip", requireUser, async (req, res) => {
   const { challengeId } = req.body;
@@ -1150,7 +1153,7 @@ app.post("/api/earn/game/flip", requireUser, async (req, res) => {
   const user = data.users.find((entry) => entry.id === req.userId);
   const game = user.earnGame;
   const challenge = game?.challenge;
-  if (!challenge || challenge.id !== challengeId || challenge.completed)
+  if (!challenge || challenge.id !== challengeId || challenge.completed || challenge.abandoned)
     return res.status(409).json({ error: "Start a new puzzle round to continue." });
   if (!challenge.resumedAt)
     return res.status(409).json({ error: "Resume this puzzle round before choosing a tile." });
