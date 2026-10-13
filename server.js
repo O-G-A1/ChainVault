@@ -652,8 +652,10 @@ app.patch("/api/admin/withdrawals/:id", requireAdmin, async (req, res) => {
     asset.amount -= request.amount;
     refreshBalance(user);
     Object.assign(transaction, {
-      title: `Sent ${request.symbol}`,
-      subtitle: `Confirmed on blockchain · To ${request.address.slice(0, 6)}…${request.address.slice(-4)}`,
+      title: request.destinationType === "bank" ? "USDC bank transfer sent" : `Sent ${request.symbol}`,
+      subtitle: request.destinationType === "bank"
+        ? "Bank transfer marked sent"
+        : `Confirmed on blockchain · To ${request.address.slice(0, 6)}…${request.address.slice(-4)}`,
       status: "completed",
       createdAt: new Date().toISOString(),
     });
@@ -698,16 +700,32 @@ app.post("/api/wallet/receive", requireUser, async (req, res) => {
 });
 app.post("/api/wallet/send", requireUser, async (req, res) => {
   const { symbol, amount, address } = req.body,
+    destinationType = req.body.destinationType === "bank" ? "bank" : "wallet",
+    submittedBankAccount = req.body.bankAccount || {},
     value = Number(amount);
+  const bankField = (field) =>
+    typeof field === "string" ? field.trim() : "";
+  const bankAccount = {
+    country: bankField(submittedBankAccount.country),
+    accountName: bankField(submittedBankAccount.accountName),
+    bankName: bankField(submittedBankAccount.bankName),
+    accountNumber: bankField(submittedBankAccount.accountNumber),
+    bankCode: bankField(submittedBankAccount.bankCode),
+  };
+  if (destinationType === "bank" && symbol !== "USDC")
+    return res.status(400).json({ error: "Bank transfers are available for USDC only." });
   if (
     !PRICES[symbol] ||
     !Number.isFinite(value) ||
     value <= 0 ||
-    !address?.trim()
+    (destinationType === "wallet" && (typeof address !== "string" || !address.trim())) ||
+    (destinationType === "bank" && Object.values(bankAccount).some((field) => !field)) ||
+    Object.values(bankAccount).some((field) => field.length > 200) ||
+    (destinationType === "wallet" && req.body.destinationType && req.body.destinationType !== "wallet")
   )
     return res
       .status(400)
-      .json({ error: "Enter a wallet address, asset, and valid amount." });
+      .json({ error: destinationType === "bank" ? "Enter complete bank details and a valid USDC amount." : "Enter a wallet address, asset, and valid amount." });
   const data = await read(),
     user = data.users.find((u) => u.id === req.userId),
     asset = user.assets.find((a) => a.symbol === symbol),
@@ -728,15 +746,18 @@ app.post("/api/wallet/send", requireUser, async (req, res) => {
     userId: user.id,
     symbol,
     amount: value,
-    address: address.trim(),
+    destinationType,
+    ...(destinationType === "bank" ? { bankAccount } : { address: address.trim() }),
     status: "pending",
     createdAt: new Date().toISOString(),
   };
   data.withdrawalRequests.unshift(request);
   addTransaction(user, {
     withdrawalId: request.id,
-    title: "Send requested",
-    subtitle: `Awaiting blockchain confirmation · To ${request.address.slice(0, 6)}…${request.address.slice(-4)}`,
+    title: destinationType === "bank" ? "Bank transfer requested" : "Send requested",
+    subtitle: destinationType === "bank"
+      ? "Awaiting review · USDC bank transfer"
+      : `Awaiting blockchain confirmation · To ${request.address.slice(0, 6)}…${request.address.slice(-4)}`,
     asset: symbol,
     amount: `-${value.toFixed(symbol === "USDC" ? 2 : 6)}`,
     value: moneyValue(value * (market[symbol]?.usd ?? PRICES[symbol])),

@@ -191,6 +191,42 @@ nav {
 .input:focus {
   border-color: var(--purple);
 }
+.input:disabled {
+  color: #adb3c3;
+  opacity: 0.8;
+}
+.send-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin: 20px 0 15px;
+  padding: 4px;
+  border: 1px solid #2d3547;
+  border-radius: 11px;
+  background: #0a0e17;
+}
+.send-method {
+  padding: 10px 12px;
+  color: #aab1c0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+}
+.send-method.active {
+  color: #eeeaff;
+  background: #30294c;
+  box-shadow: inset 0 0 0 1px #63568f;
+}
+.bank-transfer-note {
+  padding: 11px 12px;
+  border: 1px solid #3b365a;
+  border-radius: 9px;
+  background: #8d79ff0d;
+  color: #c4bddf;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .wide {
   width: 100%;
   margin-top: 22px;
@@ -403,6 +439,17 @@ nav {
   display: flex;
   justify-content: space-between;
   padding: 14px 0;
+}
+.bank-request-details {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  color: #aeb5c8;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.bank-request-details b {
+  color: #c9c1ff;
 }
 .amount {
   text-align: right;

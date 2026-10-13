@@ -121,6 +121,7 @@ let livePrices = {
   USDT: { usd: 1, change: 0 },
 };
 let priceTimer = null;
+let sendMethod = "wallet";
 const meta = {
   BTC: ["₿", "Bitcoin", ""],
   ETH: ["◆", "Ethereum", "eth"],
@@ -374,7 +375,7 @@ function walletModal(type) {
   };
   const fields =
     type === "send"
-      ? `<label class="field">RECIPIENT WALLET ADDRESS</label><input class="input" id="address" placeholder="0x...">`
+      ? `<div class="send-methods" role="group" aria-label="Send destination"><button class="send-method active" id="walletMethodButton" onclick="setSendMethod('wallet')">Crypto address</button><button class="send-method" id="bankMethodButton" onclick="setSendMethod('bank')">Bank account</button></div><div class="send-fields" id="walletSendFields"><label class="field" for="address">RECIPIENT WALLET ADDRESS</label><input class="input" id="address" placeholder="0x..." autocomplete="off"></div><div class="send-fields" id="bankSendFields" hidden><div class="bank-transfer-note">Bank transfers are available for USDC only and require review before processing.</div><label class="field" for="bankCountry">COUNTRY</label><input class="input bank-input" id="bankCountry" autocomplete="country-name" placeholder="Country"><label class="field" for="accountName">ACCOUNT HOLDER NAME</label><input class="input bank-input" id="accountName" autocomplete="name" placeholder="Name on the account"><label class="field" for="bankName">BANK NAME</label><input class="input bank-input" id="bankName" autocomplete="organization" placeholder="Bank name"><label class="field" for="accountNumber">ACCOUNT NUMBER / IBAN</label><input class="input bank-input" id="accountNumber" autocomplete="off" placeholder="Account number or IBAN"><label class="field" for="bankCode">SWIFT / BIC OR ROUTING CODE</label><input class="input bank-input" id="bankCode" autocomplete="off" placeholder="Bank identifier code"></div>`
       : "";
   const receiveOptions =
     type === "receive"
@@ -390,27 +391,44 @@ function walletModal(type) {
       : "";
   document.body.insertAdjacentHTML(
     "beforeend",
-    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>${titles[type]}</h2><button class="close" onclick="modal.remove()">×</button></div><div id="modalError"></div>${fields}${swap}${receivePanel}<label class="field">AMOUNT</label><input class="input" id="amount" type="number" min="0" step="any" placeholder="0.00"><button class="primary wide" onclick="submitWallet('${type}')">${type === "receive" ? "Request deposit approval" : type === "send" ? "Request send" : "Confirm swap"}</button><p class="small" style="margin-top:16px">${type === "receive" ? "Your request will appear in your activity and is credited only after blockchain confirmation." : type === "send" ? "Your balance is not deducted until blockchain confirmation." : "Ensure you verify the details before confirming."}</p></div></div>`,
+    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>${titles[type]}</h2><button class="close" onclick="modal.remove()">×</button></div><div id="modalError"></div>${fields}${swap}${receivePanel}<label class="field" for="amount">AMOUNT</label><input class="input" id="amount" type="number" min="0" step="any" placeholder="0.00"><button class="primary wide" id="walletSubmitButton" onclick="submitWallet('${type}')">${type === "receive" ? "Request deposit approval" : type === "send" ? "Request send" : "Confirm swap"}</button><p class="small" id="walletModalNote" style="margin-top:16px">${type === "receive" ? "Your request will appear in your activity and is credited only after blockchain confirmation." : type === "send" ? "Your balance is not deducted until blockchain confirmation." : "Ensure you verify the details before confirming."}</p></div></div>`,
   );
   if (type === "receive") updateReceiveAddress("BTC");
   if (type === "send") {
-    const sendButton = document.querySelector(
-      '#modal button[onclick^="submitWallet"]',
-    );
-    const addressInput = document.getElementById("address");
-    const updateSendButtonState = () => {
-      const hasAddress = !!addressInput.value.trim();
-      if (sendButton) {
-        sendButton.disabled = !hasAddress;
-        sendButton.style.opacity = hasAddress ? "1" : "0.55";
-        sendButton.style.cursor = hasAddress ? "pointer" : "not-allowed";
-      }
-    };
-    if (addressInput && sendButton) {
-      updateSendButtonState();
-      addressInput.addEventListener("input", updateSendButtonState);
-    }
+    sendMethod = "wallet";
+    document.querySelectorAll("#modal .send-fields input, #modal #amount").forEach((input) => input.addEventListener("input", updateSendButtonState));
+    setSendMethod("wallet");
   }
+}
+function updateSendButtonState() {
+  const button = document.getElementById("walletSubmitButton");
+  if (!button) return;
+  const amount = Number(document.getElementById("amount")?.value);
+  const requiredFields = sendMethod === "bank"
+    ? ["bankCountry", "accountName", "bankName", "accountNumber", "bankCode"]
+    : ["address"];
+  const complete = amount > 0 && requiredFields.every((id) => document.getElementById(id)?.value.trim());
+  button.disabled = !complete;
+  button.style.opacity = complete ? "1" : "0.55";
+  button.style.cursor = complete ? "pointer" : "not-allowed";
+}
+function setSendMethod(method) {
+  sendMethod = method === "bank" ? "bank" : "wallet";
+  const bank = sendMethod === "bank";
+  document.getElementById("walletSendFields").hidden = bank;
+  document.getElementById("bankSendFields").hidden = !bank;
+  document.getElementById("walletMethodButton").classList.toggle("active", !bank);
+  document.getElementById("bankMethodButton").classList.toggle("active", bank);
+  const assetSelect = document.getElementById("symbol");
+  if (assetSelect) {
+    if (bank) assetSelect.value = "USDC";
+    assetSelect.disabled = bank;
+  }
+  document.getElementById("walletSubmitButton").textContent = bank ? "Request bank transfer" : "Request send";
+  document.getElementById("walletModalNote").textContent = bank
+    ? "Your USDC remains in your Vault until your bank transfer is reviewed and marked sent."
+    : "Your balance is not deducted until blockchain confirmation.";
+  updateSendButtonState();
 }
 function updateReceiveAddress(symbol) {
   const panel = document.getElementById("receiveAddressPanel");
@@ -438,10 +456,20 @@ async function submitWallet(type) {
   );
   try {
     if (type === "send") {
-      const recipient = document.getElementById("address");
-      if (!recipient || !recipient.value.trim()) {
-        modalError.innerHTML =
-          '<div class="error">Please include a recipient address before requesting a send.</div>';
+      if (sendMethod === "bank") {
+        const bankAccount = {
+          country: bankCountry.value.trim(),
+          accountName: accountName.value.trim(),
+          bankName: bankName.value.trim(),
+          accountNumber: accountNumber.value.trim(),
+          bankCode: bankCode.value.trim(),
+        };
+        if (Object.values(bankAccount).some((value) => !value)) {
+          modalError.innerHTML = '<div class="error">Complete all bank account details to continue.</div>';
+          return;
+        }
+      } else if (!address.value.trim()) {
+        modalError.innerHTML = '<div class="error">Please include a recipient address before requesting a send.</div>';
         return;
       }
     }
@@ -453,8 +481,20 @@ async function submitWallet(type) {
         confirmButton.disabled = true;
         confirmButton.innerHTML = '<span class="button-spinner"></span> Swapping…';
       }
-    } else body.symbol = symbol.value;
-    if (type === "send") body.address = address.value;
+    } else body.symbol = type === "send" && sendMethod === "bank" ? "USDC" : symbol.value;
+    if (type === "send" && sendMethod === "bank") {
+      body.destinationType = "bank";
+      body.bankAccount = {
+        country: bankCountry.value.trim(),
+        accountName: accountName.value.trim(),
+        bankName: bankName.value.trim(),
+        accountNumber: accountNumber.value.trim(),
+        bankCode: bankCode.value.trim(),
+      };
+    } else if (type === "send") {
+      body.destinationType = "wallet";
+      body.address = address.value.trim();
+    }
     me = await api(`/api/wallet/${type}`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -525,7 +565,22 @@ function pendingWithdrawals(withdrawals) {
   const pending = withdrawals.filter((item) => item.status === "pending");
   if (!pending.length)
     return '<div class="card" style="margin-bottom:18px"><h3>Pending send requests</h3><p class="small">No sends awaiting approval.</p></div>';
-  return `<div class="card" style="margin-bottom:18px"><h3>Pending send requests <span class="small">(${pending.length})</span></h3>${pending.map((item) => `<div class="tx"><div class="tx-left"><span class="token ${meta[item.symbol][2]}">${meta[item.symbol][0]}</span><div><b>${item.user.name}</b><div class="small">${item.symbol} ${item.amount} → ${item.address.slice(0, 8)}…${item.address.slice(-4)}</div></div></div><div class="actions" style="margin:0"><button class="action" onclick="processWithdrawal('${item.id}','approve')">Approve</button><button class="action secondary" onclick="processWithdrawal('${item.id}','cancel')">Cancel</button></div></div>`).join("")}</div>`;
+  return `<div class="card" style="margin-bottom:18px"><h3>Pending send requests <span class="small">(${pending.length})</span></h3>${pending.map((item) => {
+    const bankTransfer = item.destinationType === "bank" && item.bankAccount;
+    const destination = bankTransfer
+      ? `<div class="bank-request-details"><b>Bank account · ${escapeHtml(item.bankAccount.country)}</b><span>${escapeHtml(item.bankAccount.accountName)} · ${escapeHtml(item.bankAccount.bankName)}</span><span>Account: ${escapeHtml(item.bankAccount.accountNumber)}</span><span>Bank code: ${escapeHtml(item.bankAccount.bankCode)}</span></div>`
+      : `<div class="small">${item.symbol} ${item.amount} → ${escapeHtml(item.address || "")}</div>`;
+    return `<div class="tx"><div class="tx-left"><span class="token ${meta[item.symbol]?.[2] || ""}">${meta[item.symbol]?.[0] || "•"}</span><div><b>${escapeHtml(item.user?.name)} · ${item.symbol} ${item.amount}</b>${destination}</div></div><div class="actions" style="margin:0"><button class="action" onclick="processWithdrawal('${item.id}','approve')">${bankTransfer ? "Mark sent" : "Approve"}</button><button class="action secondary" onclick="processWithdrawal('${item.id}','cancel')">Cancel</button></div></div>`;
+  }).join("")}</div>`;
+}
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]);
 }
 async function processWithdrawal(id, action) {
   try {
