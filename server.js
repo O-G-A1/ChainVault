@@ -378,8 +378,11 @@ const processMaturedStakes = (user, market) => {
   if (changed) refreshBalanceAtMarket(user, market);
   return changed;
 };
-const GAME_SYMBOLS = ["₿", "◆", "$", "₮", "⬡", "◈", "Ξ", "◎", "◉", "◇", "△", "⬢", "✦", "◌", "▣", "⬟", "⟠", "◍"];
-const MAX_GAME_LEVEL = 18;
+const GAME_SYMBOLS = ["₿", "◆", "$", "₮", "⬡", "◈", "Ξ", "◎", "◉", "◇", "△", "⬢", "✦", "◌", "▣", "⬟", "⟠", "◍", "♠", "♥", "♣", "♦", "★", "☆", "☀", "☾", "☯", "⚡", "☘", "⚙", "♜", "♞", "♟", "♛", "♚", "♔", "♕", "♧", "♤", "♡", "♢", "♨", "⚓", "✧", "❖", "⬠", "⬣", "◐", "◑", "◒"];
+const MAX_GAME_LEVEL = 50;
+const gamePairsForLevel = (level) => level <= 1
+  ? 6
+  : Math.min(GAME_SYMBOLS.length, Math.round(16 + ((level - 2) / (MAX_GAME_LEVEL - 2)) * (GAME_SYMBOLS.length - 16)));
 const gameStateForClient = (game) => ({
   level: game.level,
   maxLevel: MAX_GAME_LEVEL,
@@ -1003,7 +1006,7 @@ app.post("/api/earn/game/start", requireUser, async (req, res) => {
   const expired = challenge && Date.now() - new Date(challenge.startedAt).getTime() > 24 * 60 * 60 * 1000;
   if (!challenge || challenge.completed || expired) {
     const level = Math.max(1, Math.min(MAX_GAME_LEVEL, Number(user.earnGame.level) || 1));
-    const pairs = Math.min(GAME_SYMBOLS.length, 6 + level - 1);
+    const pairs = gamePairsForLevel(level);
     challenge = {
       id: id(),
       level,

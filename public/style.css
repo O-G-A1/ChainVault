@@ -1395,3 +1395,13 @@ nav {
   .earn-section-value span { max-width: 110px; line-height: 1.4; }
   .game-section .game-profit-head { align-items: flex-start; }
 }
+.game-section .puzzle-board { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+@media (max-width: 1000px) {
+  .game-section .puzzle-board { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .game-section .puzzle-board { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  .game-section .puzzle-board { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
