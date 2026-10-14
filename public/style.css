@@ -1195,6 +1195,7 @@ nav {
   padding-inline: clamp(22px, 5vw, 64px);
   border-bottom: 1px solid #ffffff0b;
 }
+.landing .landing-nav { position: relative; z-index: 10; }
 .landing nav .brand {
   white-space: nowrap;
   font-size: clamp(19px, 2vw, 24px);
@@ -1208,7 +1209,43 @@ nav {
   border-radius: 11px;
 }
 .landing .brand-mark svg { width: 27px; height: 27px; }
-.landing .nav-actions { align-items: center; gap: 10px; }
+.landing .nav-toggle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #464b60;
+  border-radius: 12px;
+  color: #f7f8fb;
+  background: #ffffff08;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.landing .nav-toggle:hover { border-color: #79709f; background: #ffffff12; }
+.landing .nav-toggle:active { transform: scale(.96); }
+.landing .nav-toggle svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.landing .nav-panel {
+  position: absolute;
+  inset-inline-end: clamp(22px, 5vw, 64px);
+  top: calc(100% - 1px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 12px;
+  border: 1px solid #3b4054;
+  border-radius: 16px;
+  background: #111522f5;
+  box-shadow: 0 20px 55px #0009, inset 0 1px 0 #ffffff0a;
+  backdrop-filter: blur(18px);
+  animation: landing-menu-in 150ms ease-out;
+}
+.landing .nav-panel[hidden] { display: none; }
+@keyframes landing-menu-in {
+  from { opacity: 0; transform: translateY(-5px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 .landing .language-picker {
   position: relative;
   display: inline-flex;
@@ -1233,20 +1270,21 @@ nav {
   cursor: pointer;
 }
 .landing .language-picker option { color: #171925; background: #fff; }
-.landing .nav-actions button {
-  min-height: 44px;
-  padding: 0 19px;
-  border-radius: 11px;
-  font-size: 14px;
+.landing .nav-panel button {
+  min-height: 42px;
+  padding: 0 17px;
+  border-radius: 10px;
+  font-size: 13px;
+  white-space: nowrap;
 }
-.landing .nav-actions .outline { border-color: #464b60; background: #ffffff05; }
-.landing .nav-actions .primary,
+.landing .nav-panel .outline { border: 1px solid #464b60; background: #ffffff05; }
+.landing .nav-panel .primary,
 .landing .hero-actions .primary,
 .security-callout > .primary {
   box-shadow: 0 8px 22px #715de933, inset 0 1px 0 #ffffff38;
   transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
-.landing .nav-actions .primary:hover,
+.landing .nav-panel .primary:hover,
 .landing .hero-actions .primary:hover,
 .security-callout > .primary:hover { transform: translateY(-1px); box-shadow: 0 12px 26px #715de94d; }
 .landing .hero {
@@ -1293,8 +1331,7 @@ nav {
 
 @media (max-width: 900px) {
   .landing nav { height: 76px; padding-inline: 22px; }
-  .landing .nav-actions button { min-height: 42px; padding-inline: 14px; }
-  .landing .language-picker { min-height: 39px; }
+  .landing .nav-panel { inset-inline-end: 22px; }
   .landing .hero {
     min-height: auto;
     margin: 18px auto 26px;
@@ -1313,10 +1350,11 @@ nav {
   .landing nav .brand { font-size: clamp(16px, 4.8vw, 20px); letter-spacing: -.8px; }
   .landing .brand-mark { width: 31px; height: 31px; margin-right: 6px; vertical-align: -8px; border-radius: 9px; }
   .landing .brand-mark svg { width: 23px; height: 23px; }
-  .landing .nav-actions { flex: 0 0 auto; gap: 6px; }
-  .landing .nav-actions button { min-height: 39px; padding-inline: 10px; border-radius: 9px; font-size: 12px; }
-  .landing .language-picker { min-height: 36px; gap: 2px; padding-inline: 6px; }
-  .landing .language-picker select { width: 74px; font-size: 11px; }
+  .landing .nav-toggle { width: 40px; height: 40px; border-radius: 10px; }
+  .landing .nav-panel { inset-inline: 10px; top: calc(100% + 8px); width: auto; max-width: none; flex-direction: column; align-items: stretch; gap: 9px; padding: 12px; }
+  .landing .nav-panel > button { width: 100%; min-height: 44px; }
+  .landing .language-picker { min-height: 42px; }
+  .landing .language-picker select { width: 100%; font-size: 13px; }
   .landing .hero { padding: 38px 20px 24px; margin: 0 auto 22px; gap: 27px; }
   .hero .eyebrow { font-size: 10px; letter-spacing: 1.7px; }
   .hero h1 { margin: 17px 0 15px; font-size: clamp(34px, 9.6vw, 47px); line-height: 1.06; letter-spacing: -1.9px; }
@@ -1337,7 +1375,7 @@ nav {
 @media (max-width: 360px) {
   .landing nav { padding-inline: 12px; }
   .landing nav .brand { font-size: 15px; }
-  .landing .nav-actions button { padding-inline: 8px; font-size: 11px; }
+  .landing .nav-toggle { width: 38px; height: 38px; }
   .hero h1 { font-size: 33px; }
 }
 
