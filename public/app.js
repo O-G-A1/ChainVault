@@ -458,7 +458,7 @@ function shell(body, tab = "dashboard") {
     adminSupportChatTimer = null;
     adminSupportConversationId = null;
   }
-  app.innerHTML = `<div class="app-shell"><aside class="side">${brand}<div class="menu"><button class="${tab === "dashboard" ? "active" : ""}" onclick="dashboard()">◈ &nbsp; Overview</button><button class="${tab === "earn" ? "active" : ""}" onclick="earn()">✦ &nbsp; Earn</button><button class="${tab === "activity" ? "active" : ""}" onclick="activity()">⇄ &nbsp; Activity</button><button onclick="walletModal('receive')">＋ &nbsp; Add funds</button>${me.role === "admin" ? `<button class="${tab === "admin" ? "active" : ""}" onclick="admin()" id="adminTab">♙ &nbsp; Admin Console<span class="nav-badge" id="adminSupportBadge" hidden></span></button>` : `<button class="support-tab ${tab === "support" ? "active" : ""}" onclick="support()" id="supportTab">☏ &nbsp; Chat with support<span class="nav-badge" id="supportUnreadBadge" hidden></span></button>`}</div><div class="side-footer"><button class="signout-switch" type="button" onclick="logout()" aria-label="Sign out" title="Sign out"><span class="sr-only">Sign out</span><span class="signout-switch-track" aria-hidden="true"><span class="signout-switch-knob"><svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg></span></span></button></div></aside><section class="content">${body}</section></div>`;
+  app.innerHTML = `<div class="app-shell ${tab === "support" ? "support-app-shell" : ""}"><aside class="side">${brand}<div class="menu"><button class="${tab === "dashboard" ? "active" : ""}" onclick="dashboard()">◈ &nbsp; Overview</button><button class="${tab === "earn" ? "active" : ""}" onclick="earn()">✦ &nbsp; Earn</button><button class="${tab === "activity" ? "active" : ""}" onclick="activity()">⇄ &nbsp; Activity</button><button onclick="walletModal('receive')">＋ &nbsp; Add funds</button>${me.role === "admin" ? `<button class="${tab === "admin" ? "active" : ""}" onclick="admin()" id="adminTab">♙ &nbsp; Admin Console<span class="nav-badge" id="adminSupportBadge" hidden></span></button>` : `<button class="support-tab ${tab === "support" ? "active" : ""}" onclick="support()" id="supportTab">☏ &nbsp; Chat with support<span class="nav-badge" id="supportUnreadBadge" hidden></span></button>`}</div><div class="side-footer"><button class="signout-switch" type="button" onclick="logout()" aria-label="Sign out" title="Sign out"><span class="sr-only">Sign out</span><span class="signout-switch-track" aria-hidden="true"><span class="signout-switch-knob"><svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg></span></span></button></div></aside><section class="content">${body}</section></div>`;
   localizeApp(app);
   refreshSupportBadges();
   if (!supportBadgeTimer) supportBadgeTimer = setInterval(refreshSupportBadges, 20000);
@@ -502,12 +502,25 @@ async function support() {
   try {
     const response = await api("/api/support/conversation");
     activeSupportConversation = response.conversation;
-    shell(`<header class="topbar"><div><h1>Chat with support</h1><p>Send a message and continue the conversation here.</p></div><div class="support-status"><span></span>Private support chat</div></header><section class="card support-chat"><div class="support-chat-heading"><div><b>OnchainVault support</b><span>Replies will appear in this conversation.</span></div><span class="support-live-dot" aria-label="Conversation active"></span></div><div class="support-messages" id="supportMessages" aria-live="polite"></div><form class="support-composer" onsubmit="sendSupportMessage(event)"><label class="sr-only" for="supportMessageInput">Your message</label><textarea id="supportMessageInput" maxlength="2000" rows="2" placeholder="Write a message…" required></textarea><div class="support-composer-footer"><span>Keep personal passwords and recovery phrases private.</span><button class="primary" id="supportSendButton" type="submit">Send message <span aria-hidden="true">↗</span></button></div></form></section>`, "support");
+    shell(`<main class="support-screen"><header class="support-screen-header"><button class="support-back" type="button" onclick="dashboard()" aria-label="Back to dashboard"><span aria-hidden="true">←</span><span>Vault</span></button><span class="support-agent-avatar" aria-hidden="true">OV</span><div class="support-agent-copy"><b>OnchainVault support</b><span>Private conversation · Replies appear here</span></div><span class="support-status"><span></span>Secure chat</span></header><div class="support-messages" id="supportMessages" aria-live="polite"></div><form class="support-composer support-screen-composer" onsubmit="sendSupportMessage(event)"><label class="sr-only" for="supportMessageInput">Your message</label><textarea id="supportMessageInput" maxlength="2000" rows="1" placeholder="Write a message…" required></textarea><div class="support-composer-footer"><span>Messages are automatically cleared after 24 hours. Never share passwords or recovery phrases.</span><button class="primary" id="supportSendButton" type="submit" disabled>Send <span aria-hidden="true">↗</span></button></div></form></main>`, "support");
     renderSupportMessages("supportMessages", activeSupportConversation?.messages || [], "user", true);
+    const input = document.getElementById("supportMessageInput");
+    const sendButton = document.getElementById("supportSendButton");
+    input.addEventListener("input", () => {
+      input.style.height = "auto";
+      input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
+      sendButton.disabled = !input.value.trim();
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        if (input.value.trim() && !sendButton.disabled) input.form.requestSubmit();
+      }
+    });
     refreshSupportBadges();
     supportChatTimer = setInterval(refreshSupportConversation, 8000);
   } catch (error) {
-    shell(`<header class="topbar"><div><h1>Chat with support</h1><p>We couldn’t load your conversation.</p></div></header><section class="card"><p class="error">${escapeHtml(error.message)}</p><button class="primary" onclick="support()">Try again</button></section>`, "support");
+    shell(`<main class="support-screen support-error-screen"><header class="support-screen-header"><button class="support-back" type="button" onclick="dashboard()" aria-label="Back to dashboard"><span aria-hidden="true">←</span><span>Vault</span></button><b>OnchainVault support</b></header><section class="card"><p class="error">${escapeHtml(error.message)}</p><button class="primary" onclick="support()">Try again</button></section></main>`, "support");
   }
 }
 async function refreshSupportConversation() {
@@ -536,7 +549,7 @@ async function sendSupportMessage(event) {
   } catch (error) {
     showNotice(error.message);
   } finally {
-    button.disabled = false;
+    button.disabled = !input.value.trim();
     button.innerHTML = 'Send message <span aria-hidden="true">↗</span>';
     input.focus();
   }

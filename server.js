@@ -34,6 +34,27 @@ const verifyPassword = (password, stored) => {
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(actual));
 };
 const id = () => crypto.randomBytes(18).toString("hex");
+const SUPPORT_MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
+const expireSupportMessages = (data, now = Date.now()) => {
+  const conversations = data.supportConversations || [];
+  let changed = false;
+  for (const conversation of conversations) {
+    const activeMessages = (conversation.messages || []).filter((message) => {
+      const createdAt = Date.parse(message.createdAt);
+      return Number.isFinite(createdAt) && now - createdAt < SUPPORT_MESSAGE_RETENTION_MS;
+    });
+    if (activeMessages.length !== (conversation.messages || []).length) {
+      conversation.messages = activeMessages;
+      changed = true;
+    }
+  }
+  const activeConversations = conversations.filter((conversation) => conversation.messages.length > 0);
+  if (activeConversations.length !== conversations.length) {
+    data.supportConversations = activeConversations;
+    changed = true;
+  }
+  return changed;
+};
 
 const sessionUser = async (req) => {
   const token = (req.headers.authorization || "").replace("Bearer ", "");
@@ -546,6 +567,7 @@ app.get("/api/me", requireUser, async (req, res) => {
 });
 app.get("/api/support/unread", requireUser, async (req, res) => {
   const data = await read();
+  if (expireSupportMessages(data)) await write(data);
   const user = data.users.find((entry) => entry.id === req.userId);
   const conversations = data.supportConversations || [];
   if (user?.role === "admin") {
@@ -559,8 +581,8 @@ app.get("/api/support/unread", requireUser, async (req, res) => {
 app.get("/api/support/conversation", requireUser, async (req, res) => {
   const data = await read();
   data.supportConversations ||= [];
+  let changed = expireSupportMessages(data);
   const conversation = data.supportConversations.find((entry) => entry.userId === req.userId) || null;
-  let changed = false;
   (conversation?.messages || []).forEach((message) => {
     if (message.senderRole === "admin" && !message.readByUser) {
       message.readByUser = true;
@@ -575,6 +597,7 @@ app.post("/api/support/messages", requireUser, async (req, res) => {
   if (!text || text.length > 2000)
     return res.status(400).json({ error: "Write a message of up to 2,000 characters." });
   const data = await read();
+  expireSupportMessages(data);
   const user = data.users.find((entry) => entry.id === req.userId);
   data.supportConversations ||= [];
   let conversation = data.supportConversations.find((entry) => entry.userId === req.userId);
@@ -593,6 +616,7 @@ app.post("/api/support/messages", requireUser, async (req, res) => {
 });
 app.get("/api/admin/support", requireAdmin, async (_req, res) => {
   const data = await read();
+  if (expireSupportMessages(data)) await write(data);
   const conversations = (data.supportConversations || []).map((conversation) => {
     const user = data.users.find((entry) => entry.id === conversation.userId);
     const lastMessage = conversation.messages.at(-1) || null;
@@ -610,9 +634,9 @@ app.get("/api/admin/support", requireAdmin, async (_req, res) => {
 });
 app.get("/api/admin/support/:id", requireAdmin, async (req, res) => {
   const data = await read();
+  let changed = expireSupportMessages(data);
   const conversation = (data.supportConversations || []).find((entry) => entry.id === req.params.id);
   if (!conversation) return res.status(404).json({ error: "Support conversation not found." });
-  let changed = false;
   conversation.messages.forEach((message) => {
     if (message.senderRole === "user" && !message.readByAdmin) {
       message.readByAdmin = true;
@@ -628,6 +652,7 @@ app.post("/api/admin/support/:id/messages", requireAdmin, async (req, res) => {
   if (!text || text.length > 2000)
     return res.status(400).json({ error: "Write a message of up to 2,000 characters." });
   const data = await read();
+  expireSupportMessages(data);
   const conversation = (data.supportConversations || []).find((entry) => entry.id === req.params.id);
   if (!conversation) return res.status(404).json({ error: "Support conversation not found." });
   const admin = data.users.find((entry) => entry.id === req.userId);
