@@ -315,24 +315,24 @@ function applyLanguageDocument() {
 }
 
 function toggleLandingNav() {
-  const panel = document.getElementById("landingNavPanel");
+  const panel = document.getElementById("landingNavLinks");
   const button = document.getElementById("landingNavToggle");
   if (!panel || !button) return;
-  const opening = panel.hidden;
-  panel.hidden = !opening;
+  const opening = !panel.classList.contains("open");
+  panel.classList.toggle("open", opening);
   button.setAttribute("aria-expanded", String(opening));
-  button.setAttribute("aria-label", opening ? "Close navigation menu" : "Open navigation menu");
+  button.setAttribute("aria-label", opening ? "Close menu" : "Open menu");
   button.innerHTML = opening
     ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>'
     : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
 }
 function closeLandingNav() {
-  const panel = document.getElementById("landingNavPanel");
-  if (!panel || panel.hidden) return;
-  panel.hidden = true;
+  const panel = document.getElementById("landingNavLinks");
+  if (!panel || !panel.classList.contains("open")) return;
+  panel.classList.remove("open");
   const button = document.getElementById("landingNavToggle");
   button?.setAttribute("aria-expanded", "false");
-  button?.setAttribute("aria-label", "Open navigation menu");
+  button?.setAttribute("aria-label", "Open menu");
   if (button) button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
 }
 document.addEventListener("click", (event) => {
@@ -340,7 +340,7 @@ document.addEventListener("click", (event) => {
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    const wasOpen = document.getElementById("landingNavPanel") && !document.getElementById("landingNavPanel").hidden;
+    const wasOpen = document.getElementById("landingNavLinks")?.classList.contains("open");
     closeLandingNav();
     if (wasOpen) document.getElementById("landingNavToggle")?.focus();
   }
@@ -354,7 +354,7 @@ function landing() {
   document.documentElement.lang = landingLanguage;
   document.documentElement.dir = ["ar", "ur"].includes(landingLanguage) ? "rtl" : "ltr";
   const languageOptions = landingLanguages.map(([code, name]) => `<option value="${code}" ${code === landingLanguage ? "selected" : ""}>${name}</option>`).join("");
-  app.innerHTML = `<section class="landing"><nav class="landing-nav">${brand}<button class="nav-toggle" id="landingNavToggle" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="landingNavPanel" onclick="toggleLandingNav()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="nav-panel" id="landingNavPanel" hidden><label class="language-picker"><span aria-hidden="true">◎</span><span class="sr-only">${t[0]}</span><select aria-label="${t[0]}" onchange="setLandingLanguage(this.value)">${languageOptions}</select></label><button class="outline" onclick="auth('login')">${t[1]}</button><button class="primary" onclick="auth('signup')">${t[2]}</button></div></nav><div class="hero"><div class="hero-copy"><div class="eyebrow">${t[3]}</div><h1><span>${t[4]}</span><em>${t[5]}</em></h1><p>${t[6]}</p><div class="hero-actions"><button class="primary" onclick="auth('signup')">${t[7]} <span aria-hidden="true">→</span></button><button class="text-button" onclick="auth('login')">${t[8]}</button></div><div class="hero-proof"><span>◉ ${t[9]}</span><span>◉ ${t[10]}</span></div></div><div class="wallet-preview"><div class="wallet-top"><span>${t[11]}</span><span aria-hidden="true">•••</span></div><div class="wallet-value">$24,864.21</div><span class="gain">↗ ${t[12]}</span><div class="coins"><div class="coin">₿<b>Bitcoin</b><small>${t[13]}</small></div><div class="coin">◆<b>Ethereum</b><small>${t[13]}</small></div><div class="coin">$<b>USDC</b><small>${t[14]}</small></div></div></div></div><div class="landing-body"><section class="market-section"><div class="section-heading"><div><div class="eyebrow">${t[15]}</div><h2>${t[16]}</h2></div><span class="market-status" id="landingMarketStatus">${t[17]}</span></div><div class="market-grid"><article class="market-card"><span class="token">₿</span><div><b>Bitcoin</b><small>BTC</small></div><strong data-market="BTC">—</strong></article><article class="market-card"><span class="token eth">◆</span><div><b>Ethereum</b><small>ETH</small></div><strong data-market="ETH">—</strong></article><article class="market-card"><span class="token usdc">$</span><div><b>USD Coin</b><small>USDC</small></div><strong data-market="USDC">—</strong></article></div></section><section class="feature-grid"><article><span>⌁</span><h3>${t[18]}</h3><p>${t[19]}</p></article><article><span>✓</span><h3>${t[20]}</h3><p>${t[21]}</p></article><article><span>◈</span><h3>${t[22]}</h3><p>${t[23]}</p></article></section><section class="security-callout"><div><div class="eyebrow">${t[24]}</div><h2>${t[25]}</h2><p>${t[26]}</p></div><button class="primary" onclick="auth('signup')">${t[27]}</button></section></div></section>`;
+  app.innerHTML = `<section class="landing"><nav class="landing-nav">${brand}<div class="nav-controls"><label class="language-picker"><span aria-hidden="true">◎</span><span class="sr-only">${t[0]}</span><select aria-label="${t[0]}" onchange="setLandingLanguage(this.value)">${languageOptions}</select></label><button class="nav-toggle" id="landingNavToggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="landingNavLinks" onclick="toggleLandingNav()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="nav-links" id="landingNavLinks"><button class="outline" onclick="auth('login')">${t[1]}</button><button class="primary" onclick="auth('signup')">${t[2]}</button></div></div></nav><div class="hero"><div class="hero-copy"><div class="eyebrow">${t[3]}</div><h1><span>${t[4]}</span><em>${t[5]}</em></h1><p>${t[6]}</p><div class="hero-actions"><button class="primary" onclick="auth('signup')">${t[7]} <span aria-hidden="true">→</span></button><button class="text-button" onclick="auth('login')">${t[8]}</button></div><div class="hero-proof"><span>◉ ${t[9]}</span><span>◉ ${t[10]}</span></div></div><div class="wallet-preview"><div class="wallet-top"><span>${t[11]}</span><span aria-hidden="true">•••</span></div><div class="wallet-value">$24,864.21</div><span class="gain">↗ ${t[12]}</span><div class="coins"><div class="coin">₿<b>Bitcoin</b><small>${t[13]}</small></div><div class="coin">◆<b>Ethereum</b><small>${t[13]}</small></div><div class="coin">$<b>USDC</b><small>${t[14]}</small></div></div></div></div><div class="landing-body"><section class="market-section"><div class="section-heading"><div><div class="eyebrow">${t[15]}</div><h2>${t[16]}</h2></div><span class="market-status" id="landingMarketStatus">${t[17]}</span></div><div class="market-grid"><article class="market-card"><span class="token">₿</span><div><b>Bitcoin</b><small>BTC</small></div><strong data-market="BTC">—</strong></article><article class="market-card"><span class="token eth">◆</span><div><b>Ethereum</b><small>ETH</small></div><strong data-market="ETH">—</strong></article><article class="market-card"><span class="token usdc">$</span><div><b>USD Coin</b><small>USDC</small></div><strong data-market="USDC">—</strong></article></div></section><section class="feature-grid"><article><span>⌁</span><h3>${t[18]}</h3><p>${t[19]}</p></article><article><span>✓</span><h3>${t[20]}</h3><p>${t[21]}</p></article><article><span>◈</span><h3>${t[22]}</h3><p>${t[23]}</p></article></section><section class="security-callout"><div><div class="eyebrow">${t[24]}</div><h2>${t[25]}</h2><p>${t[26]}</p></div><button class="primary" onclick="auth('signup')">${t[27]}</button></section></div></section>`;
   loadLandingMarkets();
 }
 function setLandingLanguage(language) {
