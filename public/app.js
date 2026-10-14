@@ -964,9 +964,12 @@ function walletModal(type) {
     type === "receive"
       ? `<option value="BTC">BTC — Bitcoin</option><option value="ETH">ETH — Ethereum (ERC20)</option><option value="USDT">USDT — Tether (TRC20)</option><option value="USDC">USDC — USD Coin (ERC20)</option>`
       : "";
+  const swapReceiveOptions = Object.keys(meta)
+    .map((symbol) => `<option value="${symbol}" ${symbol === "USDC" ? "selected" : ""}>${symbol} — ${meta[symbol][1]}</option>`)
+    .join("");
   const swap =
     type === "swap"
-      ? `<div class="swap-trade"><section class="swap-panel"><div class="swap-panel-top"><span>Pay</span><span class="swap-balance">Balance <b id="swapFromBalance">0</b> <button type="button" onclick="setSwapMax()">MAX</button></span></div><div class="swap-entry"><label class="swap-token"><span class="swap-token-icon" id="swapFromIcon">₿</span><span><select id="from" aria-label="Pay asset" onchange="updateSwapQuote()">${options}</select><small id="swapFromName">Bitcoin</small></span><span class="swap-chevron">⌄</span></label><input id="amount" type="number" min="0" step="any" placeholder="0.00" oninput="updateSwapQuote()" aria-label="Amount to pay"></div></section><button type="button" class="swap-flip" onclick="flipSwapAssets()" aria-label="Switch pay and receive assets">↕</button><section class="swap-panel swap-receive"><div class="swap-panel-top"><span>Receive</span><span class="swap-balance">Est. balance <b id="swapToBalance">0</b></span></div><div class="swap-entry"><label class="swap-token"><span class="swap-token-icon" id="swapToIcon">$</span><span><select id="to" aria-label="Receive asset" onchange="updateSwapQuote()">${options}</select><small id="swapToName">USD Coin</small></span><span class="swap-chevron">⌄</span></label><output class="swap-estimate" id="swapEstimate">0</output></div></section><div class="swap-fee-card"><div><span>Swap fee</span><strong>0.5%</strong></div><p id="swapFeeLine">A lower 0.5% fee is included in your estimate.</p><small id="swapRateLine">Rates use current market prices.</small></div></div>`
+      ? `<div class="swap-trade"><div class="swap-panels"><section class="swap-panel"><div class="swap-panel-top"><span>Pay</span><span class="swap-balance">Balance <b id="swapFromBalance">0</b> <button type="button" onclick="setSwapMax()">MAX</button></span></div><div class="swap-entry"><label class="swap-token"><span class="swap-token-icon" id="swapFromIcon">₿</span><span><select id="from" aria-label="Pay asset" onchange="updateSwapQuote()">${options}</select><small id="swapFromName">Bitcoin</small></span><span class="swap-chevron">⌄</span></label><input id="amount" type="number" min="0" step="any" placeholder="0.00" oninput="updateSwapQuote()" aria-label="Amount to pay"></div></section><button type="button" class="swap-flip" onclick="flipSwapAssets()" aria-label="Switch pay and receive assets"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h15l-4-4m5 12H5l4 4"/></svg></button><section class="swap-panel swap-receive"><div class="swap-panel-top"><span>Receive</span><span class="swap-balance">Balance <b id="swapToBalance">0</b></span></div><div class="swap-entry"><label class="swap-token"><span class="swap-token-icon" id="swapToIcon">$</span><span><select id="to" aria-label="Receive asset" onchange="updateSwapQuote()">${swapReceiveOptions}</select><small id="swapToName">USD Coin</small></span><span class="swap-chevron">⌄</span></label><output class="swap-estimate" id="swapEstimate">0</output></div></section></div><div class="swap-fee-card"><div><span>Swap fee</span><strong>0.5%</strong></div><p id="swapFeeLine">A lower 0.5% fee is included in your estimate.</p><small id="swapRateLine">Rates use current market prices.</small></div></div>`
       : `<label class="field">ASSET</label><select class="input" id="symbol" onchange="updateReceiveAddress(this.value)">${receiveOptions || options}</select>`;
   const receivePanel =
     type === "receive"
@@ -1093,10 +1096,10 @@ async function submitWallet(type) {
         return;
       }
     }
-    const body = { amount: amount.value };
+    const body = { amount: document.getElementById("amount").value };
     if (type === "swap") {
-      body.from = from.value;
-      body.to = to.value;
+      body.from = document.getElementById("from").value;
+      body.to = document.getElementById("to").value;
       if (confirmButton) {
         confirmButton.disabled = true;
         confirmButton.innerHTML = '<span class="button-spinner"></span> Swapping…';
