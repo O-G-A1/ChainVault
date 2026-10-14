@@ -779,6 +779,45 @@ nav {
     max(16px, env(safe-area-inset-bottom, 0px))
     max(16px, env(safe-area-inset-left, 0px));
 }
+
+/* Swap quote modal */
+.swap-modal { width: min(620px, 100%); padding: 26px; background: #111116; border-color: #292930; }
+.swap-modal .modal-head { margin-bottom: 20px; }
+.swap-modal .modal-head h2 { font-size: 23px; }
+.swap-trade { position: relative; display: grid; gap: 9px; }
+.swap-panel { position: relative; padding: 21px 22px 23px; border: 1px solid #2b2b33; border-radius: 15px; background: #1b1b20; }
+.swap-panel-top { display: flex; align-items: center; justify-content: space-between; color: #f4f3f7; font-size: 17px; }
+.swap-balance { display: flex; align-items: center; gap: 7px; color: #92919f; font-size: 12px; }
+.swap-balance b { color: #b5b3c2; font-weight: 500; }
+.swap-balance button { border: 0; background: transparent; color: #8b7cf6; font: inherit; font-weight: 700; cursor: pointer; padding: 3px 0 3px 4px; }
+.swap-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 23px; }
+.swap-token { display: grid; grid-template-columns: 42px minmax(75px, 1fr) 13px; align-items: center; gap: 10px; cursor: pointer; }
+.swap-token-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; background: #2b2937; color: #bfb5ff; font-size: 23px; font-weight: 700; }
+.swap-token select { display: block; width: 100%; border: 0; padding: 0; background: transparent; color: #f6f5fa; font-size: 16px; font-weight: 600; appearance: none; cursor: pointer; outline: none; }
+.swap-token select option { color: #17171c; }
+.swap-token small { display: block; margin-top: 3px; color: #9998a5; font-size: 12px; }
+.swap-chevron { color: #9d9ba9; font-size: 19px; }
+.swap-entry > input, .swap-estimate { min-width: 0; width: 48%; border: 0; background: transparent; color: #f5f4f8; text-align: right; font: inherit; font-size: clamp(20px, 4vw, 27px); outline: none; }
+.swap-entry > input::placeholder { color: #777582; }
+.swap-entry > input::-webkit-inner-spin-button { appearance: none; }
+.swap-estimate { color: #aaa4d9; overflow: hidden; text-overflow: ellipsis; }
+.swap-flip { position: absolute; z-index: 1; top: 50%; left: 50%; display: grid; width: 48px; height: 48px; place-items: center; transform: translate(-50%, -50%); border: 5px solid #111116; border-radius: 50%; background: #303037; color: #f5f4f8; font-size: 25px; cursor: pointer; }
+.swap-fee-card { margin: 14px 0 18px; padding: 15px 17px; border: 1px solid #2c2b34; border-radius: 13px; background: #15151b; }
+.swap-fee-card > div { display: flex; justify-content: space-between; color: #aaa8b5; font-size: 14px; }
+.swap-fee-card strong { color: #eeeafc; font-weight: 600; }
+.swap-fee-card p { margin: 8px 0 4px; color: #c4bedf; font-size: 12px; }
+.swap-fee-card small { color: #85838f; font-size: 11px; }
+.swap-modal > .wide { min-height: 52px; border-radius: 12px; font-size: 16px; }
+.swap-modal > .wide:disabled { opacity: .48; cursor: not-allowed; }
+@media (max-width: 480px) {
+  .swap-modal { padding: 18px; }
+  .swap-panel { padding: 17px 14px 18px; }
+  .swap-entry { gap: 7px; margin-top: 20px; }
+  .swap-token { grid-template-columns: 36px minmax(65px, 1fr) 10px; gap: 7px; }
+  .swap-token-icon { width: 36px; height: 36px; font-size: 20px; }
+  .swap-token select { font-size: 14px; }
+  .swap-entry > input, .swap-estimate { font-size: 20px; }
+}
 .device-dialog {
   max-height: min(80dvh, 460px);
 }

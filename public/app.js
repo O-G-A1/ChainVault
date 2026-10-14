@@ -966,7 +966,7 @@ function walletModal(type) {
       : "";
   const swap =
     type === "swap"
-      ? `<label class="field">FROM ASSET</label><select class="input" id="from">${options}</select><label class="field">TO ASSET</label><select class="input" id="to"><option value="USDC">USDC — USD Coin</option><option value="ETH">ETH — Ethereum</option><option value="BTC">BTC — Bitcoin</option></select>`
+      ? `<div class="swap-trade"><section class="swap-panel"><div class="swap-panel-top"><span>Pay</span><span class="swap-balance">Balance <b id="swapFromBalance">0</b> <button type="button" onclick="setSwapMax()">MAX</button></span></div><div class="swap-entry"><label class="swap-token"><span class="swap-token-icon" id="swapFromIcon">₿</span><span><select id="from" aria-label="Pay asset" onchange="updateSwapQuote()">${options}</select><small id="swapFromName">Bitcoin</small></span><span class="swap-chevron">⌄</span></label><input id="amount" type="number" min="0" step="any" placeholder="0.00" oninput="updateSwapQuote()" aria-label="Amount to pay"></div></section><button type="button" class="swap-flip" onclick="flipSwapAssets()" aria-label="Switch pay and receive assets">↕</button><section class="swap-panel swap-receive"><div class="swap-panel-top"><span>Receive</span><span class="swap-balance">Est. balance <b id="swapToBalance">0</b></span></div><div class="swap-entry"><label class="swap-token"><span class="swap-token-icon" id="swapToIcon">$</span><span><select id="to" aria-label="Receive asset" onchange="updateSwapQuote()">${options}</select><small id="swapToName">USD Coin</small></span><span class="swap-chevron">⌄</span></label><output class="swap-estimate" id="swapEstimate">0</output></div></section><div class="swap-fee-card"><div><span>Swap fee</span><strong>0.5%</strong></div><p id="swapFeeLine">A lower 0.5% fee is included in your estimate.</p><small id="swapRateLine">Rates use current market prices.</small></div></div>`
       : `<label class="field">ASSET</label><select class="input" id="symbol" onchange="updateReceiveAddress(this.value)">${receiveOptions || options}</select>`;
   const receivePanel =
     type === "receive"
@@ -974,14 +974,51 @@ function walletModal(type) {
       : "";
   document.body.insertAdjacentHTML(
     "beforeend",
-    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>${titles[type]}</h2><button class="close" onclick="modal.remove()">×</button></div><div id="modalError"></div>${fields}${swap}${receivePanel}<label class="field" for="amount">AMOUNT</label><input class="input" id="amount" type="number" min="0" step="any" placeholder="0.00"><button class="primary wide" id="walletSubmitButton" onclick="submitWallet('${type}')">${type === "receive" ? "Request deposit approval" : type === "send" ? "Request send" : "Confirm swap"}</button><p class="small" id="walletModalNote" style="margin-top:16px">${type === "receive" ? "Your request will appear in your activity and is credited only after blockchain confirmation." : type === "send" ? "Your balance is not deducted until blockchain confirmation." : "Ensure you verify the details before confirming."}</p></div></div>`,
+    `<div class="modal-bg" id="modal"><div class="modal ${type === "swap" ? "swap-modal" : ""}"><div class="modal-head"><h2>${titles[type]}</h2><button class="close" onclick="modal.remove()">×</button></div><div id="modalError"></div>${fields}${swap}${receivePanel}${type === "swap" ? "" : `<label class="field" for="amount">AMOUNT</label><input class="input" id="amount" type="number" min="0" step="any" placeholder="0.00">`}<button class="primary wide" id="walletSubmitButton" onclick="submitWallet('${type}')">${type === "receive" ? "Request deposit approval" : type === "send" ? "Request send" : "Swap"}</button><p class="small" id="walletModalNote" style="margin-top:16px">${type === "receive" ? "Your request will appear in your activity and is credited only after blockchain confirmation." : type === "send" ? "Your balance is not deducted until blockchain confirmation." : "Review your estimated output before confirming."}</p></div></div>`,
   );
   if (type === "receive") updateReceiveAddress("BTC");
+  if (type === "swap") updateSwapQuote();
   if (type === "send") {
     sendMethod = "wallet";
     document.querySelectorAll("#modal .send-fields input, #modal #amount").forEach((input) => input.addEventListener("input", updateSendButtonState));
     setSendMethod("wallet");
   }
+}
+function swapBalance(symbol) {
+  return Number(me?.assets?.find((asset) => asset.symbol === symbol)?.amount || 0);
+}
+function updateSwapQuote() {
+  const from = document.getElementById("from")?.value || "BTC";
+  const to = document.getElementById("to")?.value || "USDC";
+  const amount = Number(document.getElementById("amount")?.value || 0);
+  const fromPrice = livePrices[from]?.usd || 0;
+  const toPrice = livePrices[to]?.usd || 0;
+  const estimated = amount > 0 && fromPrice && toPrice && from !== to ? amount * fromPrice * 0.995 / toPrice : 0;
+  const feeUsd = amount > 0 && fromPrice ? amount * fromPrice * 0.005 : 0;
+  document.getElementById("swapFromIcon").textContent = meta[from][0];
+  document.getElementById("swapToIcon").textContent = meta[to][0];
+  document.getElementById("swapFromName").textContent = meta[from][1];
+  document.getElementById("swapToName").textContent = meta[to][1];
+  document.getElementById("swapFromBalance").textContent = formatAssetAmount(swapBalance(from));
+  document.getElementById("swapToBalance").textContent = formatAssetAmount(swapBalance(to));
+  document.getElementById("swapEstimate").textContent = formatAssetAmount(estimated);
+  document.getElementById("swapFeeLine").textContent = `0.5% fee · ${money(feeUsd)} estimated`;
+  document.getElementById("swapRateLine").textContent = fromPrice && toPrice ? `1 ${from} ≈ ${formatAssetAmount(fromPrice / toPrice)} ${to} · indicative market rate` : "Rates use current market prices.";
+  const button = document.getElementById("walletSubmitButton");
+  const valid = amount > 0 && from !== to && amount <= swapBalance(from);
+  button.disabled = !valid;
+  button.title = amount > swapBalance(from) ? `Insufficient ${from} balance` : "";
+}
+function setSwapMax() {
+  const input = document.getElementById("amount");
+  input.value = swapBalance(document.getElementById("from").value);
+  updateSwapQuote();
+}
+function flipSwapAssets() {
+  const from = document.getElementById("from");
+  const to = document.getElementById("to");
+  [from.value, to.value] = [to.value, from.value];
+  updateSwapQuote();
 }
 function updateSendButtonState() {
   const button = document.getElementById("walletSubmitButton");
@@ -1099,7 +1136,7 @@ async function submitWallet(type) {
   } catch (error) {
     if (type === "swap" && confirmButton) {
       confirmButton.disabled = false;
-      confirmButton.textContent = "Confirm swap";
+      confirmButton.textContent = "Swap";
     }
     modalError.innerHTML = `<div class="error">${error.message}</div>`;
   }
