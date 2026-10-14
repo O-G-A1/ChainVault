@@ -1196,7 +1196,7 @@ nav {
   border-bottom: 1px solid #ffffff0b;
 }
 .landing .landing-nav { position: relative; z-index: 10; }
-.landing .nav-controls { display: flex; align-items: center; gap: 10px; }
+.landing .nav-controls { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .landing nav .brand {
   white-space: nowrap;
   font-size: clamp(19px, 2vw, 24px);
@@ -1220,6 +1220,10 @@ nav {
   border-radius: 12px;
   color: #f7f8fb;
   background: #ffffff08;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  z-index: 2;
   transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 .landing .nav-toggle:hover { border-color: #79709f; background: #ffffff12; }
@@ -1353,18 +1357,11 @@ nav {
   .landing-body { padding-inline: 20px; }
   .market-section { padding: 38px 0; }
 }
-@media (max-width: 360px) {
-  .landing nav { padding-inline: 12px; }
-  .landing nav .brand { font-size: 15px; }
-  .landing .nav-toggle { width: 38px; height: 38px; }
-  .hero h1 { font-size: 33px; }
-}
-
 @media (max-width: 720px) {
   .landing .nav-controls { gap: 8px; }
   .landing .nav-toggle { display: grid; width: clamp(38px, 6vw, 42px); height: clamp(38px, 6vw, 42px); border-radius: 11px; }
-  .landing .language-picker { min-height: 42px; }
-  .landing .language-picker select { width: clamp(76px, 24vw, 124px); font-size: 12px; }
+  .landing .language-picker { min-height: 42px; gap: 4px; padding-inline: 7px; }
+  .landing .language-picker select { width: clamp(62px, 19vw, 112px); min-width: 0; font-size: 12px; }
   .landing .nav-links {
     position: absolute;
     inset-inline: 12px;
@@ -1384,6 +1381,15 @@ nav {
   }
   .landing .nav-links.open { display: flex; animation: landing-menu-in 150ms ease-out; }
   .landing .nav-links button { width: 100%; min-height: 45px; }
+}
+@media (max-width: 360px) {
+  .landing nav { padding-inline: 8px; }
+  .landing nav .brand { font-size: 14px; letter-spacing: -.6px; }
+  .landing .brand-mark { width: 28px; height: 28px; margin-right: 5px; vertical-align: -7px; }
+  .landing .brand-mark svg { width: 21px; height: 21px; }
+  .landing .nav-controls { gap: 5px; }
+  .landing .language-picker select { width: 56px; }
+  .hero h1 { font-size: 33px; }
 }
 @keyframes landing-menu-in {
   from { opacity: 0; transform: translateY(-5px); }
