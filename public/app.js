@@ -495,6 +495,24 @@ function renderSupportMessages(containerId, messages, role, forceBottom = false)
   container.innerHTML = supportMessageRows(messages, role);
   if (forceBottom || nearBottom) container.scrollTop = container.scrollHeight;
 }
+function configureSupportComposer(inputId, buttonId) {
+  const input = document.getElementById(inputId);
+  const button = document.getElementById(buttonId);
+  if (!input || !button) return;
+  const update = () => {
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
+    button.disabled = !input.value.trim();
+  };
+  input.addEventListener("input", update);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      if (input.value.trim() && !button.disabled) input.form.requestSubmit();
+    }
+  });
+  update();
+}
 let activeSupportConversation = null;
 async function support() {
   if (supportChatTimer) clearInterval(supportChatTimer);
@@ -504,19 +522,7 @@ async function support() {
     activeSupportConversation = response.conversation;
     shell(`<main class="support-screen"><header class="support-screen-header"><button class="support-back" type="button" onclick="dashboard()" aria-label="Back to dashboard"><span aria-hidden="true">←</span><span>Vault</span></button><span class="support-agent-avatar" aria-hidden="true">OV</span><div class="support-agent-copy"><b>OnchainVault support</b><span>Private conversation · Replies appear here</span></div><span class="support-status"><span></span>Secure chat</span></header><div class="support-messages" id="supportMessages" aria-live="polite"></div><form class="support-composer support-screen-composer" onsubmit="sendSupportMessage(event)"><label class="sr-only" for="supportMessageInput">Your message</label><textarea id="supportMessageInput" maxlength="2000" rows="1" placeholder="Write a message…" required></textarea><div class="support-composer-footer"><span>Messages are automatically cleared after 24 hours. Never share passwords or recovery phrases.</span><button class="primary" id="supportSendButton" type="submit" disabled>Send <span aria-hidden="true">↗</span></button></div></form></main>`, "support");
     renderSupportMessages("supportMessages", activeSupportConversation?.messages || [], "user", true);
-    const input = document.getElementById("supportMessageInput");
-    const sendButton = document.getElementById("supportSendButton");
-    input.addEventListener("input", () => {
-      input.style.height = "auto";
-      input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
-      sendButton.disabled = !input.value.trim();
-    });
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-        event.preventDefault();
-        if (input.value.trim() && !sendButton.disabled) input.form.requestSubmit();
-      }
-    });
+    configureSupportComposer("supportMessageInput", "supportSendButton");
     refreshSupportBadges();
     supportChatTimer = setInterval(refreshSupportConversation, 8000);
   } catch (error) {
@@ -1206,8 +1212,9 @@ async function openAdminSupport(id) {
   try {
     const response = await api(`/api/admin/support/${encodeURIComponent(id)}`);
     document.getElementById("adminSupportModal")?.remove();
-    document.body.insertAdjacentHTML("beforeend", `<div class="modal-bg" id="adminSupportModal"><section class="modal support-admin-modal" role="dialog" aria-modal="true" aria-labelledby="adminSupportTitle"><div class="modal-head"><div><h2 id="adminSupportTitle">${escapeHtml(response.user.name)}</h2><div class="small">${escapeHtml(response.user.email)}</div></div><button class="close" onclick="closeAdminSupport()" aria-label="Close conversation">×</button></div><div class="support-messages admin-support-messages" id="adminSupportMessages" aria-live="polite"></div><form class="support-composer admin-support-composer" onsubmit="sendAdminSupportReply(event)"><label class="sr-only" for="adminSupportReply">Reply to customer</label><textarea id="adminSupportReply" maxlength="2000" rows="2" placeholder="Write a reply…" required></textarea><button class="primary" id="adminSupportSend" type="submit">Send reply</button></form></section></div>`);
+    document.body.insertAdjacentHTML("beforeend", `<div class="modal-bg support-admin-fullscreen-bg" id="adminSupportModal"><section class="modal support-admin-modal support-admin-fullscreen" role="dialog" aria-modal="true" aria-labelledby="adminSupportTitle"><header class="support-screen-header"><button class="support-back" type="button" onclick="closeAdminSupport()" aria-label="Back to support inbox"><span aria-hidden="true">←</span><span>Inbox</span></button><span class="support-agent-avatar" aria-hidden="true">${escapeHtml(initials(response.user.name))}</span><div class="support-agent-copy"><b id="adminSupportTitle">${escapeHtml(response.user.name)}</b><span>${escapeHtml(response.user.email)} · Customer conversation</span></div><span class="support-status"><span></span>Private chat</span></header><div class="support-messages admin-support-messages" id="adminSupportMessages" aria-live="polite"></div><form class="support-composer support-screen-composer" onsubmit="sendAdminSupportReply(event)"><label class="sr-only" for="adminSupportReply">Reply to customer</label><textarea id="adminSupportReply" maxlength="2000" rows="1" placeholder="Write a reply…" required></textarea><div class="support-composer-footer"><span>Messages are automatically cleared after 24 hours. Never request passwords or recovery phrases.</span><button class="primary" id="adminSupportSend" type="submit" disabled>Send reply <span aria-hidden="true">↗</span></button></div></form></section></div>`);
     renderSupportMessages("adminSupportMessages", response.conversation.messages, "admin", true);
+    configureSupportComposer("adminSupportReply", "adminSupportSend");
     refreshSupportBadges();
     if (adminSupportChatTimer) clearInterval(adminSupportChatTimer);
     adminSupportChatTimer = setInterval(refreshAdminSupportChat, 8000);
@@ -1250,8 +1257,8 @@ async function sendAdminSupportReply(event) {
   } catch (error) {
     showNotice(error.message);
   } finally {
-    button.disabled = false;
-    button.textContent = "Send reply";
+    button.disabled = !input.value.trim();
+    button.innerHTML = 'Send reply <span aria-hidden="true">↗</span>';
     input.focus();
   }
 }
