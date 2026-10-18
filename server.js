@@ -510,6 +510,7 @@ async function notifyNewSignup(user) {
       Authorization: `Bearer ${RESEND_API_KEY}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(8000),
     body: JSON.stringify({
       from: EMAIL_FROM,
       to: [EMAIL_TO],
@@ -571,9 +572,11 @@ app.post("/api/auth/signup", async (req, res) => {
   const token = id();
   data.sessions[token] = { userId: user.id, lastActivityAt: Date.now() };
   await write(data);
-  notifyNewSignup(user).catch((error) =>
-    console.error("Signup notification error:", error.message),
-  );
+  try {
+    await notifyNewSignup(user);
+  } catch (error) {
+    console.error("Signup notification error:", error.message);
+  }
   res.json({ token, user: publicUser(user) });
 });
 app.post("/api/auth/login", async (req, res) => {
