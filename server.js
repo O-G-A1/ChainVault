@@ -7,6 +7,8 @@ import {
   readData as read,
   writeData as write,
   ensureInitialData,
+  reserveUsername,
+  releaseUsername,
 } from "./lib/mongoStorage.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,6 +36,14 @@ const verifyPassword = (password, stored) => {
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(actual));
 };
 const id = () => crypto.randomBytes(18).toString("hex");
+const normalizeUsername = (value) => String(value || "").trim().toLowerCase();
+const isValidUsername = (value) => /^[a-zA-Z0-9_]{3,20}$/.test(value);
+const usernameFromEmail = (email, suffix = "") => {
+  let base = String(email || "user").split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/^_+|_+$/g, "").slice(0, 15) || "user";
+  if (base.length < 3) base = `user_${base}`;
+  const tail = suffix ? `_${suffix}` : "";
+  return `${base.slice(0, 20 - tail.length)}${tail}`;
+};
 const SUPPORT_MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const expireSupportMessages = (data, now = Date.now()) => {
   const conversations = data.supportConversations || [];
@@ -189,6 +199,37 @@ const initializeData = () => {
           data.referralRequests = [];
           changed = true;
         }
+        const seenUsernames = new Set();
+        const priorUsernames = [];
+        for (const user of data.users) {
+          const prior = user.username || "";
+          let candidate = prior;
+          let normalized = normalizeUsername(candidate);
+          if (!isValidUsername(candidate) || seenUsernames.has(normalized)) {
+            let suffix = 1;
+            do {
+              candidate = usernameFromEmail(user.email, suffix === 1 ? "" : suffix);
+              normalized = normalizeUsername(candidate);
+              suffix += 1;
+            } while (seenUsernames.has(normalized));
+          }
+          let reserved = await reserveUsername(user.id, normalized);
+          while (!reserved) {
+            let suffix = 1;
+            do {
+              candidate = usernameFromEmail(user.email, suffix === 1 ? "" : suffix);
+              normalized = normalizeUsername(candidate);
+              suffix += 1;
+            } while (seenUsernames.has(normalized));
+            reserved = await reserveUsername(user.id, normalized);
+          }
+          seenUsernames.add(normalized);
+          if (candidate !== prior) {
+            priorUsernames.push({ userId: user.id, username: prior });
+            user.username = candidate;
+            changed = true;
+          }
+        }
         data.users.forEach((user) => {
           if (user.name === "VaultFlow Admin") {
             user.name = "OnchainVault Admin";
@@ -228,6 +269,9 @@ const initializeData = () => {
           }
         });
         if (changed) await write(data);
+        for (const prior of priorUsernames) {
+          await releaseUsername(prior.userId, normalizeUsername(prior.username));
+        }
       } catch (err) {
         console.error(
           "Initial data setup failed:",
@@ -481,24 +525,33 @@ async function notifyNewSignup(user) {
 
 app.post("/api/auth/signup", async (req, res) => {
   const { name, email, password } = req.body;
+  const username = typeof req.body.username === "string" ? req.body.username.trim() : "";
   if (
     !name ||
+    !isValidUsername(username) ||
     !/^\S+@\S+\.\S+$/.test(email) ||
     !password ||
     password.length < 8
   )
     return res.status(400).json({
       error:
-        "Enter a name, valid email, and password of at least 8 characters.",
+        "Enter a name, a username of 3–20 letters, numbers, or underscores, a valid email, and a password of at least 8 characters.",
     });
   const data = await read();
+  const normalizedUsername = normalizeUsername(username);
+  if (data.users.some((user) => normalizeUsername(user.username) === normalizedUsername))
+    return res.status(409).json({ error: "That username is already taken." });
   if (data.users.some((u) => u.email.toLowerCase() === email.toLowerCase()))
     return res
       .status(409)
       .json({ error: "An account already exists for that email." });
+  const userId = id();
+  if (!(await reserveUsername(userId, normalizedUsername)))
+    return res.status(409).json({ error: "That username is already taken." });
   const user = {
-    id: id(),
+    id: userId,
     name,
+    username,
     email: email.toLowerCase(),
     password: hash(password),
     role: "user",
@@ -525,8 +578,15 @@ app.post("/api/auth/signup", async (req, res) => {
 });
 app.post("/api/auth/login", async (req, res) => {
   const data = await read();
-  const user = data.users.find(
-    (u) => u.email.toLowerCase() === (req.body.email || "").toLowerCase(),
+  const identifier = typeof req.body.username === "string"
+    ? req.body.username.trim()
+    : typeof req.body.identifier === "string"
+      ? req.body.identifier.trim()
+      : typeof req.body.email === "string" ? req.body.email.trim() : "";
+  const normalizedIdentifier = normalizeUsername(identifier);
+  const user = data.users.find((entry) =>
+    normalizeUsername(entry.username) === normalizedIdentifier ||
+    entry.email.toLowerCase() === identifier.toLowerCase()
   );
   if (!user || !verifyPassword(req.body.password || "", user.password))
     return res.status(401).json({ error: "Incorrect email or password." });
@@ -706,7 +766,7 @@ app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
   if (data.users[userIndex].role === "admin")
     return res.status(403).json({ error: "Admin accounts cannot be deleted." });
 
-  data.users.splice(userIndex, 1);
+  const [deletedUser] = data.users.splice(userIndex, 1);
   Object.keys(data.sessions).forEach((token) => {
     const session = data.sessions[token];
     if ((typeof session === "string" ? session : session.userId) === req.params.id)
@@ -722,6 +782,7 @@ app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
     (conversation) => conversation.userId !== req.params.id,
   );
   await write(data);
+  await releaseUsername(deletedUser.id, normalizeUsername(deletedUser.username));
   res.json({ ok: true });
 });
 app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
@@ -739,6 +800,21 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
     return res
       .status(409)
       .json({ error: "Another account already uses that email." });
+  let priorUsername = "";
+  if (req.body.username !== undefined) {
+    const nextUsername = typeof req.body.username === "string" ? req.body.username.trim() : "";
+    if (!isValidUsername(nextUsername))
+      return res.status(400).json({ error: "Enter a username with 3–20 letters, numbers, or underscores." });
+    const normalized = normalizeUsername(nextUsername);
+    if (data.users.some((entry) => entry.id !== user.id && normalizeUsername(entry.username) === normalized))
+      return res.status(409).json({ error: "That username is already taken." });
+    if (normalized !== normalizeUsername(user.username)) {
+      if (!(await reserveUsername(user.id, normalized)))
+        return res.status(409).json({ error: "That username is already taken." });
+      priorUsername = normalizeUsername(user.username);
+      user.username = nextUsername;
+    }
+  }
   const allowed = ["name", "email", "balance", "change", "verified", "withdrawalLimit"];
   allowed.forEach((key) => {
     if (req.body[key] === undefined) return;
@@ -776,6 +852,7 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
       });
   }
   await write(data);
+  if (priorUsername) await releaseUsername(user.id, priorUsername);
   res.json(publicUser(user));
 });
 app.post("/api/admin/users/:id/adjustment", requireAdmin, async (req, res) => {

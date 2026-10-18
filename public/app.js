@@ -396,11 +396,12 @@ function auth(mode) {
   activeRoute = "auth";
   activeAuthMode = mode;
   applyLanguageDocument();
-  app.innerHTML = `<section class="auth-shell"><div class="auth-card">${brand}<h1>${mode === "login" ? "Welcome back" : "Create your Vault"}</h1><p>${mode === "login" ? "Sign in to access your Vault." : "Start managing your digital assets today."}</p><div id="err"></div>${mode === "signup" ? '<label class="field">FULL NAME</label><input class="input" id="name" placeholder="Your name">' : ""}<label class="field">EMAIL ADDRESS</label><input class="input" id="email" type="email" placeholder="you@example.com"><label class="field">PASSWORD</label><input class="input" id="password" type="password" placeholder="At least 8 characters">${mode === "signup" ? '<label class="field">CONFIRM PASSWORD</label><input class="input" id="confirmPassword" type="password" placeholder="Type your password again" autocomplete="new-password">' : ""}<button class="primary wide" onclick="submitAuth('${mode}')">${mode === "login" ? "Sign in" : "Create account"}</button><div class="switch">${mode === "login" ? 'New to OnchainVault? <span class="link" onclick="auth(\'signup\')">Create an account</span>' : 'Already have an account? <span class="link" onclick="auth(\'login\')">Sign in</span>'}</div>${mode === "login" ? '<div class="demo">Private access · Admin-reviewed accounts</div>' : ""}</div></section>`;
+  app.innerHTML = `<section class="auth-shell"><div class="auth-card">${brand}<h1>${mode === "login" ? "Welcome back" : "Create your Vault"}</h1><p>${mode === "login" ? "Sign in to access your Vault." : "Start managing your digital assets today."}</p><div id="err"></div>${mode === "signup" ? '<label class="field" for="name">FULL NAME</label><input class="input" id="name" autocomplete="name" placeholder="Your name"><label class="field" for="username">USERNAME</label><input class="input" id="username" autocomplete="username" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" placeholder="Choose a username">' : '<label class="field" for="username">USERNAME</label><input class="input" id="username" autocomplete="username" placeholder="Your username">'}${mode === "signup" ? '<label class="field" for="email">EMAIL ADDRESS</label><input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com">' : ""}<label class="field" for="password">PASSWORD</label><input class="input" id="password" type="password" autocomplete="${mode === "login" ? "current-password" : "new-password"}" placeholder="At least 8 characters">${mode === "signup" ? '<label class="field" for="confirmPassword">CONFIRM PASSWORD</label><input class="input" id="confirmPassword" type="password" placeholder="Type your password again" autocomplete="new-password">' : ""}<button class="primary wide" onclick="submitAuth('${mode}')">${mode === "login" ? "Sign in" : "Create account"}</button><div class="switch">${mode === "login" ? 'New to OnchainVault? <span class="link" onclick="auth(\'signup\')">Create an account</span>' : 'Already have an account? <span class="link" onclick="auth(\'login\')">Sign in</span>'}</div>${mode === "login" ? '<div class="demo">You can use your username or email while existing accounts transition.</div>' : '<div class="demo">Use 3–20 letters, numbers, or underscores.</div>'}</div></section>`;
   localizeApp(app);
 }
 async function submitAuth(mode) {
   try {
+    const usernameInput = document.getElementById("username");
     const emailInput = document.getElementById("email");
     const passwordInput = document.getElementById("password");
     const nameInput = document.getElementById("name");
@@ -413,10 +414,13 @@ async function submitAuth(mode) {
       }
     }
     const body = {
-      email: emailInput.value.trim(),
+      username: usernameInput.value.trim(),
       password: passwordInput.value,
     };
-    if (mode === "signup") body.name = nameInput.value.trim();
+    if (mode === "signup") {
+      body.name = nameInput.value.trim();
+      body.email = emailInput.value.trim();
+    }
     const data = await api(
       `/api/auth/${mode === "login" ? "login" : "signup"}`,
       { method: "POST", body: JSON.stringify(body) },
@@ -723,7 +727,7 @@ function timeGreeting() {
 }
 function dashboard() {
   shell(
-    `<header class="topbar"><div><h1>${timeGreeting()}, ${me.name.split(" ")[0]}.</h1><p>Here’s how your Vault is doing today.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header><div class="grid"><div><div class="card balance-card"><div class="balance-label">Total Vault value</div><div class="balance" id="livePortfolioValue">${money(portfolioValue(me.assets, livePrices, me.stakes))}</div><span class="gain">↗ ${me.change}% this month</span><div class="actions"><button class="action" onclick="walletModal('receive')">↓ Receive</button><button class="action secondary" onclick="walletModal('send')">↑ Send</button><button class="action secondary" onclick="walletModal('swap')">⇄ Swap</button></div></div><div class="card" style="margin-top:18px"><h3>Your assets</h3><div class="small" id="marketUpdated">Loading live market prices…</div>${assetRows()}</div></div><div class="card"><h3>Recent activity</h3>${transactionRows()}<div class="switch" style="text-align:left"><span class="link" onclick="activity()">View all activity →</span></div></div></div>`,
+    `<header class="topbar"><div><h1>${timeGreeting()}, ${me.name.split(" ")[0]}.</h1><p>Here’s how your Vault is doing today.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div><div>${escapeHtml(me.name)}<div class="small">@${escapeHtml(me.username || "")}</div></div></div></header><div class="grid"><div><div class="card balance-card"><div class="balance-label">Total Vault value</div><div class="balance" id="livePortfolioValue">${money(portfolioValue(me.assets, livePrices, me.stakes))}</div><span class="gain">↗ ${me.change}% this month</span><div class="actions"><button class="action" onclick="walletModal('receive')">↓ Receive</button><button class="action secondary" onclick="walletModal('send')">↑ Send</button><button class="action secondary" onclick="walletModal('swap')">⇄ Swap</button></div></div><div class="card" style="margin-top:18px"><h3>Your assets</h3><div class="small" id="marketUpdated">Loading live market prices…</div>${assetRows()}</div></div><div class="card"><h3>Recent activity</h3>${transactionRows()}<div class="switch" style="text-align:left"><span class="link" onclick="activity()">View all activity →</span></div></div></div>`,
   );
   startPriceRefresh();
   startTimeRefresh();
@@ -1192,7 +1196,7 @@ async function admin() {
     const rows = customers
       .map(
         (user) =>
-          `<tr><td><b>${escapeHtml(user.name)}</b><div class="small">${escapeHtml(user.email)}</div></td><td>${money(portfolioValue(user.assets, livePrices, user.stakes))}</td><td><span class="status ${user.verified ? "" : "off"}">${user.verified ? "Verified" : "Pending"}</span></td><td>${escapeHtml(user.createdAt)}</td><td><div class="admin-account-actions"><button class="edit" onclick="editUser('${user.id}')">Manage</button><button class="action award-bonus-action" onclick="openBonusModal('${user.id}')">Award bonus</button></div></td></tr>`,
+          `<tr><td><b>${escapeHtml(user.name)}</b><div class="small">@${escapeHtml(user.username)} · ${escapeHtml(user.email)}</div></td><td>${money(portfolioValue(user.assets, livePrices, user.stakes))}</td><td><span class="status ${user.verified ? "" : "off"}">${user.verified ? "Verified" : "Pending"}</span></td><td>${escapeHtml(user.createdAt)}</td><td><div class="admin-account-actions"><button class="edit" onclick="editUser('${user.id}')">Manage</button><button class="action award-bonus-action" onclick="openBonusModal('${user.id}')">Award bonus</button></div></td></tr>`,
       )
       .join("");
     shell(
@@ -1342,7 +1346,7 @@ function editUser(id) {
   const user = users.find((item) => item.id === id);
   document.body.insertAdjacentHTML(
     "beforeend",
-    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>Manage account</h2><button class="close" onclick="modal.remove()">×</button></div><label class="field">NAME</label><input class="input" id="editName" value="${user.name}"><label class="field">EMAIL</label><input class="input" id="editEmail" value="${user.email}"><div class="form-row"><div><label class="field">CURRENT PORTFOLIO</label><div class="input" style="color:#bfc6d6">${money(portfolioValue(user.assets, livePrices, user.stakes))}</div></div><div><label class="field">MONTHLY CHANGE (%)</label><input class="input" id="editChange" type="number" value="${user.change}"></div></div><label class="field">ADD FUNDS (USDC)</label><input class="input" id="adminCredit" type="number" min="0" step="0.01" placeholder="Enter an amount to add"><label class="field">WITHDRAW FUNDS (USDC)</label><input class="input" id="adminWithdrawal" type="number" min="0" step="0.01" placeholder="Enter an amount to remove"><label class="field">MINIMUM BALANCE TO WITHDRAW (USD)</label><input class="input" id="editWithdrawalLimit" type="number" min="0" step="0.01" value="${user.withdrawalLimit ?? ""}" placeholder="Leave blank to remove limit"><div class="small" style="margin-top:7px">Users cannot withdraw unless their total portfolio reaches this minimum balance. Leave blank or zero to remove it.</div><label class="field">VERIFICATION</label><select class="input" id="editVerified"><option value="true" ${user.verified ? "selected" : ""}>Verified</option><option value="false" ${!user.verified ? "selected" : ""}>Pending</option></select><button class="primary wide" onclick="saveUser('${id}')">Save changes</button><button class="danger wide" onclick="deleteUser('${id}')">Delete account</button></div></div>`,
+    `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>Manage account</h2><button class="close" onclick="modal.remove()">×</button></div><label class="field">NAME</label><input class="input" id="editName" value="${escapeHtml(user.name)}"><label class="field">USERNAME</label><input class="input" id="editUsername" value="${escapeHtml(user.username)}" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}"><label class="field">EMAIL</label><input class="input" id="editEmail" value="${escapeHtml(user.email)}"><div class="form-row"><div><label class="field">CURRENT PORTFOLIO</label><div class="input" style="color:#bfc6d6">${money(portfolioValue(user.assets, livePrices, user.stakes))}</div></div><div><label class="field">MONTHLY CHANGE (%)</label><input class="input" id="editChange" type="number" value="${user.change}"></div></div><label class="field">ADD FUNDS (USDC)</label><input class="input" id="adminCredit" type="number" min="0" step="0.01" placeholder="Enter an amount to add"><label class="field">WITHDRAW FUNDS (USDC)</label><input class="input" id="adminWithdrawal" type="number" min="0" step="0.01" placeholder="Enter an amount to remove"><label class="field">MINIMUM BALANCE TO WITHDRAW (USD)</label><input class="input" id="editWithdrawalLimit" type="number" min="0" step="0.01" value="${user.withdrawalLimit ?? ""}" placeholder="Leave blank to remove limit"><div class="small" style="margin-top:7px">Users cannot withdraw unless their total portfolio reaches this minimum balance. Leave blank or zero to remove it.</div><label class="field">VERIFICATION</label><select class="input" id="editVerified"><option value="true" ${user.verified ? "selected" : ""}>Verified</option><option value="false" ${!user.verified ? "selected" : ""}>Pending</option></select><button class="primary wide" onclick="saveUser('${id}')">Save changes</button><button class="danger wide" onclick="deleteUser('${id}')">Delete account</button></div></div>`,
   );
 }
 function openBonusModal(id) {
@@ -1382,6 +1386,7 @@ async function saveUser(id) {
       method: "PATCH",
       body: JSON.stringify({
         name: editName.value,
+        username: editUsername.value,
         email: editEmail.value,
         change: editChange.value,
         verified: editVerified.value === "true",
