@@ -731,7 +731,9 @@ function gamePairsForLevel(level) {
   if (level <= 1) return 6;
   return Math.min(50, Math.round(16 + ((level - 2) / 48) * 34));
 }
-function earn() {
+async function earn() {
+  let referralRequests = [];
+  try { referralRequests = await api("/api/earn/referrals"); } catch {}
   clearInterval(puzzleTimer);
   const balance = portfolioValue(me.assets, livePrices, me.stakes);
   const eligible = balance >= 2000;
@@ -780,13 +782,25 @@ function earn() {
     ? `<button class="outline quit-puzzle-button" id="puzzleQuitButton" onclick="quitPuzzleRound()">Quit round</button>`
     : `<button class="outline" id="puzzleStartButton" onclick="startPuzzle()">${activeRound ? "Resume round" : challenge?.completed ? "Start next level" : challenge?.abandoned ? "Start new round" : "Start puzzle"}</button>`;
   const gameSection = `<section class="earn-section game-section"><div class="earn-section-heading"><div><div class="eyebrow">Puzzle rewards</div><h2>Crypto match</h2><p>Complete level 1 to unlock a 16-pair puzzle. Later levels add pairs until the 50-pair cap.</p></div><div class="game-level-badge">Level ${game.level || 1} <small>/ ${game.maxLevel || 50}</small></div></div><div class="game-profit-card card"><div class="game-profit-head"><div><span class="eyebrow">Game profit balance</span><h3>${money(pendingProfit)}</h3></div><span class="small">${threshold > 0 ? `of ${money(threshold)}` : "5% payout target"}</span></div><div class="progress-track" role="progressbar" aria-label="Progress to game reward transfer" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.toFixed(0)}"><span style="width:${progress.toFixed(2)}%"></span></div><p class="game-profit-copy">${payoutCopy}</p></div><div class="earn-grid"><article class="card earn-task puzzle-card"><div class="offer-heading"><div class="task-icon task-icon-green">⌘</div><span class="puzzle-label">LEVEL ${challenge?.level || game.level || 1} · ${pairs} PAIRS</span></div><div class="task-tag">ONCHAIN PUZZLE</div><h3>Match the crypto tiles</h3><p>Each round starts at 0.05% of your balance. Faster rounds with fewer moves earn a higher rate; slower rounds and extra moves reduce it. Higher levels increase the base rate. Game profits transfer when they reach 5% of your starting balance.</p><div class="puzzle-scoreline"><span id="puzzleProgress">${challenge?.completed ? pairs : challenge?.matchedIndices?.length / 2 || 0} of ${pairs} pairs · ${challenge?.moves || 0} moves</span><span id="puzzleClock">${puzzleClockLabel()}</span></div><div class="puzzle-board" id="puzzleBoard" aria-label="Crypto matching puzzle"></div><div class="puzzle-foot"><span class="small" id="puzzleResult">${lastRoundCopy}</span>${puzzleAction}</div></article></div></section>`;
+  const referralSection = `<section class="earn-section"><div class="earn-section-heading"><div><div class="eyebrow">Optional referral</div><h2>Refer a friend</h2><p>Submit the email linked to their account. After admin approval, you receive $18 and they receive $9.</p></div></div><div class="card" style="padding:22px"><form onsubmit="submitReferral(event)" style="display:flex;gap:12px;flex-wrap:wrap"><label class="sr-only" for="referralEmail">Referred user's email</label><input class="input" style="flex:1;min-width:220px" id="referralEmail" type="email" autocomplete="email" placeholder="friend@example.com" required><button class="primary" type="submit">Submit referral</button></form><div id="referralNotice" class="small" style="margin-top:12px" aria-live="polite"></div><div style="margin-top:14px">${referralRequests.length ? referralRequests.map((request) => `<div class="tx"><div><b>${escapeHtml(request.referredEmail)}</b><div class="small">${new Date(request.createdAt).toLocaleDateString()}</div></div><span class="status ${request.status === "pending" ? "off" : ""}">${escapeHtml(request.status)}</span></div>`).join("") : '<p class="small">No referrals submitted yet.</p>'}</div></div></section>`;
   shell(
-    `<header class="topbar"><div><h1>Earn</h1><p>Put your assets to work and build your Vault.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Total Vault value</div><div class="balance" id="earnBalance">${money(balance)}</div><div class="earn-status ${eligible ? "eligible" : "locked"}">${eligible ? "Available to stake" : "Locked · $2,000 minimum balance"}</div></div></section><section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Make more of your assets.</h2><p>Choose an earning path below. Both stay together in your Earn dashboard.</p></div><span class="earn-spark">✦</span></section>${stakingSection}${gameSection}`,
+    `<header class="topbar"><div><h1>Earn</h1><p>Put your assets to work and build your Vault.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Total Vault value</div><div class="balance" id="earnBalance">${money(balance)}</div><div class="earn-status ${eligible ? "eligible" : "locked"}">${eligible ? "Available to stake" : "Locked · $2,000 minimum balance"}</div></div></section><section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Make more of your assets.</h2><p>Choose an earning path below. Both stay together in your Earn dashboard.</p></div><span class="earn-spark">✦</span></section>${stakingSection}${gameSection}${referralSection}`,
     "earn",
   );
   renderPuzzle();
   if (puzzleState.started) startPuzzleClock();
   startPriceRefresh();
+}
+async function submitReferral(event) {
+  event.preventDefault();
+  const input = document.getElementById("referralEmail");
+  const notice = document.getElementById("referralNotice");
+  try {
+    await api("/api/earn/referrals", { method: "POST", body: JSON.stringify({ email: input.value }) });
+    await earn();
+    const refreshedNotice = document.getElementById("referralNotice");
+    if (refreshedNotice) refreshedNotice.textContent = "Referral submitted for admin review.";
+  } catch (error) { notice.textContent = error.message; }
 }
 function stakeNextRewardDate(stake) {
   const date = new Date(stake.startedAt);
@@ -1165,11 +1179,12 @@ async function submitWallet(type) {
 }
 async function admin() {
   try {
-    const [allUsers, deposits, withdrawals, supportConversations] = await Promise.all([
+    const [allUsers, deposits, withdrawals, supportConversations, referrals] = await Promise.all([
       api("/api/admin/users"),
       api("/api/admin/deposits"),
       api("/api/admin/withdrawals"),
       api("/api/admin/support"),
+      api("/api/admin/referrals"),
     ]);
     users = allUsers;
     const customers = users.filter((user) => user.role !== "admin");
@@ -1180,12 +1195,23 @@ async function admin() {
       )
       .join("");
     shell(
-      `<header class="topbar"><div><h1>Admin console</h1><p>Updates are applied only to the account you select.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header>${adminSupportInbox(supportConversations)}${pendingDeposits(deposits)}${pendingWithdrawals(withdrawals)}<div class="card"><h3>All customer accounts <span class="small">(${customers.length})</span></h3><div style="overflow:auto"><table class="admin-table"><thead><tr><th>User</th><th>Portfolio</th><th>Status</th><th>Joined</th><th>Account actions</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="small">No customer accounts yet.</td></tr>'}</tbody></table></div></div>`,
+      `<header class="topbar"><div><h1>Admin console</h1><p>Updates are applied only to the account you select.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header>${adminSupportInbox(supportConversations)}${pendingDeposits(deposits)}${pendingWithdrawals(withdrawals)}${pendingReferrals(referrals)}<div class="card"><h3>All customer accounts <span class="small">(${customers.length})</span></h3><div style="overflow:auto"><table class="admin-table"><thead><tr><th>User</th><th>Portfolio</th><th>Status</th><th>Joined</th><th>Account actions</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="small">No customer accounts yet.</td></tr>'}</tbody></table></div></div>`,
       "admin",
     );
   } catch {
     dashboard();
   }
+}
+function pendingReferrals(referrals) {
+  const pending = referrals.filter((item) => item.status === "pending");
+  if (!pending.length) return '<div class="card" style="margin-bottom:18px"><h3>Referral requests</h3><p class="small">No referrals awaiting approval.</p></div>';
+  return `<div class="card" style="margin-bottom:18px"><h3>Pending referral requests <span class="small">(${pending.length})</span></h3>${pending.map((item) => `<div class="tx"><div class="tx-left"><span class="token">✦</span><div><b>${escapeHtml(item.referrer?.name || "Deleted account")}</b><div class="small">${escapeHtml(item.referrer?.email || "")} referred ${escapeHtml(item.referred?.name || "Deleted account")} · ${escapeHtml(item.referred?.email || item.referredEmail)}</div><div class="small">${new Date(item.createdAt).toLocaleString()}</div></div></div><div class="actions" style="margin:0"><button class="action" onclick="processReferral('${item.id}','approve')">Approve · $18 + $9</button><button class="action secondary" onclick="processReferral('${item.id}','reject')">Reject</button></div></div>`).join("")}</div>`;
+}
+async function processReferral(id, action) {
+  try {
+    await api(`/api/admin/referrals/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ action }) });
+    admin();
+  } catch (error) { showNotice(error.message); }
 }
 function adminSupportInbox(conversations) {
   const unread = conversations.reduce((sum, conversation) => sum + conversation.unreadCount, 0);

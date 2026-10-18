@@ -185,6 +185,10 @@ const initializeData = () => {
           data.withdrawalRequests = [];
           changed = true;
         }
+        if (!Array.isArray(data.referralRequests)) {
+          data.referralRequests = [];
+          changed = true;
+        }
         data.users.forEach((user) => {
           if (user.name === "VaultFlow Admin") {
             user.name = "OnchainVault Admin";
@@ -565,6 +569,26 @@ app.get("/api/me", requireUser, async (req, res) => {
   }
   res.json(publicUser(user));
 });
+app.get("/api/earn/referrals", requireUser, async (req, res) => {
+  const data = await read();
+  res.json((data.referralRequests || []).filter((request) => request.referrerId === req.userId));
+});
+app.post("/api/earn/referrals", requireUser, async (req, res) => {
+  const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
+  const data = await read();
+  const referrer = data.users.find((user) => user.id === req.userId);
+  const referred = data.users.find((user) => user.email.toLowerCase() === email && user.role !== "admin");
+  if (!referred) return res.status(404).json({ error: "No account found for that email." });
+  if (referred.id === referrer.id) return res.status(400).json({ error: "You cannot refer your own account." });
+  data.referralRequests ||= [];
+  if (data.referralRequests.some((request) => request.referredId === referred.id))
+    return res.status(409).json({ error: "This account already has a referral request." });
+  const request = { id: id(), referrerId: referrer.id, referredId: referred.id, referredEmail: referred.email, status: "pending", createdAt: new Date().toISOString() };
+  data.referralRequests.unshift(request);
+  await write(data);
+  res.status(201).json(request);
+});
 app.get("/api/support/unread", requireUser, async (req, res) => {
   const data = await read();
   if (expireSupportMessages(data)) await write(data);
@@ -826,6 +850,38 @@ app.get("/api/admin/deposits", requireAdmin, async (req, res) => {
       user: publicUser(data.users.find((user) => user.id === request.userId)),
     })),
   );
+});
+app.get("/api/admin/referrals", requireAdmin, async (_req, res) => {
+  const data = await read();
+  res.json((data.referralRequests || []).map((request) => ({
+    ...request,
+    referrer: (() => { const user = data.users.find((entry) => entry.id === request.referrerId); return user ? { id: user.id, name: user.name, email: user.email } : null; })(),
+    referred: (() => { const user = data.users.find((entry) => entry.id === request.referredId); return user ? { id: user.id, name: user.name, email: user.email } : null; })(),
+  })));
+});
+app.patch("/api/admin/referrals/:id", requireAdmin, async (req, res) => {
+  const action = req.body.action;
+  if (!["approve", "reject"].includes(action)) return res.status(400).json({ error: "Choose approve or reject." });
+  const data = await read();
+  const request = (data.referralRequests || []).find((entry) => entry.id === req.params.id);
+  if (!request) return res.status(404).json({ error: "Referral request not found." });
+  if (request.status !== "pending") return res.status(409).json({ error: "This referral request has already been reviewed." });
+  if (action === "approve") {
+    const referrer = data.users.find((user) => user.id === request.referrerId);
+    const referred = data.users.find((user) => user.id === request.referredId);
+    if (!referrer || !referred) return res.status(404).json({ error: "A referred account could not be found." });
+    for (const [user, amount, subtitle] of [[referrer, 18, "Referral reward"], [referred, 9, "Referral welcome reward"]]) {
+      const stablecoin = ensureAsset(user, "USDC");
+      stablecoin.amount = Number((Number(stablecoin.amount || 0) + amount).toFixed(2));
+      refreshBalance(user);
+      addTransaction(user, { title: "Referral bonus", subtitle, asset: "USDC", amount: `+${amount.toFixed(2)}`, value: moneyValue(amount), status: "completed" });
+    }
+  }
+  request.status = action === "approve" ? "approved" : "rejected";
+  request.reviewedAt = new Date().toISOString();
+  request.reviewedBy = req.userId;
+  await write(data);
+  res.json(request);
 });
 app.get("/api/admin/withdrawals", requireAdmin, async (req, res) => {
   const data = await read();
