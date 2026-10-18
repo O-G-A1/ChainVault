@@ -670,7 +670,8 @@ function transactionRows(all = false) {
           ? `<span data-timeago="${tx.createdAt}">${timeAgo(tx.createdAt)}</span>`
           : tx.time;
 
-        return `<div class="tx" data-asset="${tx.asset}" data-amount="${tx.amount}" data-pending="${tx.status === "pending"}"><div class="tx-left"><span class="token ${cls}">${icon}</span><div><b>${escapeHtml(tx.title)}</b><div class="small">${escapeHtml(tx.subtitle)} · ${when}</div></div></div><div class="amount ${tx.amount.startsWith("+") && tx.status !== "cancelled" ? "positive" : ""}">${displayAmount}<div class="small" data-live-value>${displayValue}</div>${state}</div></div>`;
+        const title = tx.title === "Admin bonus" ? "Game bonus" : tx.title;
+        return `<div class="tx" data-asset="${tx.asset}" data-amount="${tx.amount}" data-pending="${tx.status === "pending"}"><div class="tx-left"><span class="token ${cls}">${icon}</span><div><b>${escapeHtml(title)}</b><div class="small">${escapeHtml(tx.subtitle)} · ${when}</div></div></div><div class="amount ${tx.amount.startsWith("+") && tx.status !== "cancelled" ? "positive" : ""}">${displayAmount}<div class="small" data-live-value>${displayValue}</div>${state}</div></div>`;
       })
       .join("") ||
     '<p class="small">No activity yet. Add funds to begin building your Vault.</p>'

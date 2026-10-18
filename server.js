@@ -832,7 +832,7 @@ app.post("/api/admin/users/:id/bonus", requireAdmin, async (req, res) => {
   stablecoin.amount = Number((Number(stablecoin.amount || 0) + amount).toFixed(2));
   refreshBalance(user);
   addTransaction(user, {
-    title: "Admin bonus",
+    title: "Game bonus",
     subtitle: reason,
     asset: "USDC",
     amount: `+${amount.toFixed(2)}`,
