@@ -2,7 +2,7 @@
   "id": "/",
   "name": "OnchainVault",
   "short_name": "OnchainVault",
-  "description": "Digital assets, simplified.",
+  "description": "A secure home for recovered funds, with live markets and staking for eligible assets.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
