@@ -352,6 +352,7 @@ nav {
   padding: 12px;
   color: #aeb6c6;
   font-size: 12px;
+  text-align: center;
 }
 .app-shell {
   min-height: 100vh;
