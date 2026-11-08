@@ -1037,6 +1037,130 @@ nav {
   max-width: 580px;
   margin-top: 14px;
 }
+.scam-report-modal {
+  width: min(640px, 100%);
+}
+.scam-report-modal .modal-head {
+  margin-bottom: 12px;
+}
+.scam-report-intro,
+.scam-report-disclaimer {
+  color: #b7bfce;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.scam-report-intro {
+  margin: 0 0 14px;
+}
+.scam-report-disclaimer {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid #49416e;
+  border-radius: 10px;
+  background: #211e32;
+}
+.scam-report-disclaimer strong {
+  color: #e1dcff;
+}
+.scam-report-disclaimer p {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #49416e;
+}
+.scam-report-disclaimer a {
+  color: #c4baff;
+}
+.scam-report-form .field {
+  margin-top: 14px;
+}
+.scam-report-description {
+  min-height: 110px;
+  resize: vertical;
+}
+.scam-report-crypto {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 17px;
+  color: #d3d8e2;
+  font-size: 13px;
+}
+.scam-report-crypto input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--purple);
+}
+.scam-report-crypto-fields[hidden] {
+  display: none;
+}
+.scam-report-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 22px;
+}
+.scam-report-actions button {
+  min-height: 46px;
+}
+.scam-report-actions button:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+.scam-report-interpol {
+  border: 1px solid #454d60;
+  border-radius: 10px;
+  background: #202737;
+  color: #f0f2f7;
+  font-weight: 700;
+}
+.scam-report-status {
+  min-height: 0;
+  margin: 0;
+  color: #bcb3ff;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.scam-report-status:not(:empty) {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+}
+.scam-report-status:not(:empty)::before {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  border: 2px solid #bcb3ff55;
+  border-top-color: #bcb3ff;
+  border-radius: 50%;
+  content: "";
+  animation: loading-spin 0.75s linear infinite;
+}
+.scam-report-toast {
+  position: fixed;
+  z-index: 1200;
+  right: max(20px, env(safe-area-inset-right, 0px));
+  bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  max-width: min(440px, calc(100vw - 40px));
+  padding: 14px 18px;
+  border: 1px solid #3d6652;
+  border-radius: 12px;
+  background: #14251e;
+  color: #c5f3d9;
+  box-shadow: 0 12px 36px #0008;
+  font-size: 13px;
+  line-height: 1.5;
+}
+@media (max-width: 520px) {
+  .scam-report-actions {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scam-report-status:not(:empty)::before {
+    animation: none;
+  }
+}
 
 /* Purposeful mobile layout */
 @media (max-width: 800px) {
