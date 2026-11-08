@@ -1073,6 +1073,28 @@ nav {
 .scam-report-form .field {
   margin-top: 14px;
 }
+.scam-report-id-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+}
+.scam-report-id-row .input {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.scam-report-copy {
+  min-width: 90px;
+}
+.scam-report-id-help,
+.scam-report-copy-status {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.scam-report-copy-status:not(:empty) {
+  color: var(--green);
+}
 .scam-report-description {
   min-height: 110px;
   resize: vertical;

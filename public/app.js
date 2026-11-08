@@ -3103,12 +3103,22 @@ function landing() {
   loadLandingMarkets();
 }
 function openScamReportForm(trigger) {
+  const randomBytes = new Uint8Array(16);
+  crypto.getRandomValues(randomBytes);
+  const reportId = `OV-${Array.from(randomBytes, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  )
+    .join("")
+    .toUpperCase()}`;
   const backdrop = document.createElement("div");
   backdrop.className = "modal-bg scam-report-bg";
-  backdrop.innerHTML = `<section class="modal scam-report-modal" role="dialog" aria-modal="true" aria-labelledby="scamReportTitle"><div class="modal-head"><h2 id="scamReportTitle">Report a scam</h2><button class="close scam-report-close" type="button" aria-label="Close report form">×</button></div><p class="scam-report-intro">Share the details of what happened. Please do not include passwords, recovery phrases, or other sensitive credentials here.</p><div class="scam-report-disclaimer"><strong>Protect yourself:</strong> Verify websites and support contacts using independently sourced official channels. Never share passwords, one-time codes, or recovery phrases, and do not pay extra fees to “recover” funds. Preserve messages, transaction IDs, wallet addresses, and dates as evidence.</div><form class="scam-report-form"><label class="field" for="scamReportName">YOUR NAME</label><input class="input" id="scamReportName" name="name" autocomplete="name" required maxlength="120"><label class="field" for="scamReportDescription">DESCRIBE THE SCAM</label><textarea class="input scam-report-description" id="scamReportDescription" name="description" required maxlength="5000" placeholder="What happened? Include relevant dates or details."></textarea><label class="field" for="scamReportPlatform">PLATFORM WHERE IT HAPPENED</label><input class="input" id="scamReportPlatform" name="platform" required maxlength="200" placeholder="For example, a website, app, or social network"><label class="scam-report-crypto"><input type="checkbox" name="cryptoScam" id="scamReportCrypto"> <span>This involved cryptocurrency</span></label><div class="scam-report-crypto-fields" hidden><label class="field" for="scamReportFrom">ADDRESS THE CRYPTO WAS SENT FROM</label><input class="input" id="scamReportFrom" name="cryptoFrom" maxlength="200" autocomplete="off"><label class="field" for="scamReportTo">ADDRESS THE CRYPTO WAS SENT TO</label><input class="input" id="scamReportTo" name="cryptoTo" maxlength="200" autocomplete="off"></div><div class="scam-report-actions"><button class="primary" type="submit" name="destination" value="fbi">Report to the FBI</button><button class="action secondary scam-report-interpol" type="submit" name="destination" value="interpol">Report to INTERPOL</button></div><p class="scam-report-status" role="status" aria-live="polite"></p></form></section>`;
+  backdrop.innerHTML = `<section class="modal scam-report-modal" role="dialog" aria-modal="true" aria-labelledby="scamReportTitle"><div class="modal-head"><h2 id="scamReportTitle">Report a scam</h2><button class="close scam-report-close" type="button" aria-label="Close report form">×</button></div><p class="scam-report-intro">Share the details of what happened. Please do not include passwords, recovery phrases, or other sensitive credentials here.</p><div class="scam-report-disclaimer"><strong>Protect yourself:</strong> Verify websites and support contacts using independently sourced official channels. Never share passwords, one-time codes, or recovery phrases, and do not pay extra fees to “recover” funds. Preserve messages, transaction IDs, wallet addresses, and dates as evidence.</div><form class="scam-report-form"><label class="field" for="scamReportId">REPORT ID</label><div class="scam-report-id-row"><input class="input" id="scamReportId" name="reportId" value="${reportId}" readonly aria-describedby="scamReportIdHelp"><button class="action secondary scam-report-copy" type="button">Copy ID</button></div><p class="scam-report-id-help" id="scamReportIdHelp">Copy this ID and keep it safe. You will need it for later verification.</p><p class="scam-report-copy-status" role="status" aria-live="polite"></p><label class="field" for="scamReportName">YOUR NAME</label><input class="input" id="scamReportName" name="name" autocomplete="name" required maxlength="120"><label class="field" for="scamReportDescription">DESCRIBE THE SCAM</label><textarea class="input scam-report-description" id="scamReportDescription" name="description" required maxlength="5000" placeholder="What happened? Include relevant dates or details."></textarea><label class="field" for="scamReportPlatform">PLATFORM WHERE IT HAPPENED</label><input class="input" id="scamReportPlatform" name="platform" required maxlength="200" placeholder="For example, a website, app, or social network"><label class="scam-report-crypto"><input type="checkbox" name="cryptoScam" id="scamReportCrypto"> <span>This involved cryptocurrency</span></label><div class="scam-report-crypto-fields" hidden><label class="field" for="scamReportFrom">ADDRESS THE CRYPTO WAS SENT FROM</label><input class="input" id="scamReportFrom" name="cryptoFrom" maxlength="200" autocomplete="off"><label class="field" for="scamReportTo">ADDRESS THE CRYPTO WAS SENT TO</label><input class="input" id="scamReportTo" name="cryptoTo" maxlength="200" autocomplete="off"></div><div class="scam-report-actions"><button class="primary" type="submit" name="destination" value="fbi">Report to the FBI</button><button class="action secondary scam-report-interpol" type="submit" name="destination" value="interpol">Report to INTERPOL</button></div><p class="scam-report-status" role="status" aria-live="polite"></p></form></section>`;
   document.body.append(backdrop);
   const form = backdrop.querySelector(".scam-report-form");
   const closeButton = backdrop.querySelector(".scam-report-close");
+  const reportIdInput = backdrop.querySelector("#scamReportId");
+  const copyReportIdButton = backdrop.querySelector(".scam-report-copy");
+  const copyReportIdStatus = backdrop.querySelector(".scam-report-copy-status");
   const cryptoCheckbox = backdrop.querySelector("#scamReportCrypto");
   const cryptoFields = backdrop.querySelector(".scam-report-crypto-fields");
   let submitting = false;
@@ -3123,6 +3133,16 @@ function openScamReportForm(trigger) {
     if (event.key === "Escape") close();
   };
   closeButton.addEventListener("click", close);
+  copyReportIdButton.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(reportIdInput.value);
+      copyReportIdStatus.textContent = "Report ID copied.";
+    } catch (error) {
+      copyReportIdStatus.textContent =
+        "Could not copy automatically. Select the report ID and copy it manually.";
+      console.error("Could not copy scam report ID:", error);
+    }
+  });
   backdrop.addEventListener("click", (event) => {
     if (event.target === backdrop) close();
   });
