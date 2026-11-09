@@ -822,6 +822,34 @@ nav {
 .swap-fee-card small { color: #85838f; font-size: 11px; }
 .swap-modal > .wide { min-height: 52px; border-radius: 12px; font-size: 16px; }
 .swap-modal > .wide:disabled { opacity: .48; cursor: not-allowed; }
+.swap-modal {
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+}
+.swap-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.swap-token,
+.swap-token > span:nth-child(2) {
+  min-width: 0;
+}
+.swap-token select {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.swap-entry > input,
+.swap-estimate {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
 @media (max-width: 480px) {
   .swap-modal { padding: 18px; }
   .swap-panel { padding: 17px 14px 18px; }
@@ -1842,6 +1870,50 @@ nav {
 .crypto-relief-review-wide { grid-column: 1 / -1; }
 .crypto-relief-review-actions { flex-wrap: wrap; justify-content: flex-end; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* Keep every dialog inside the usable viewport and prevent form controls from
+   contributing their intrinsic content width to the dialog layout. */
+.modal-bg {
+  padding: max(12px, env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
+}
+.modal {
+  min-width: 0;
+  max-width: 100%;
+  max-height: calc(100dvh - 24px);
+}
+.modal input,
+.modal textarea,
+.modal select,
+.modal output,
+.modal button {
+  min-width: 0;
+  max-width: 100%;
+}
+.modal-head,
+.modal-head h2,
+.modal p,
+.modal small,
+.modal .small,
+.modal .error {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .modal-bg { place-items: center; }
+  .modal { padding: 18px; }
+  .swap-modal { padding: 16px; }
+  .swap-panel { padding: 16px 12px 18px; }
+  .swap-entry { gap: 8px; }
+  .swap-token { grid-template-columns: 32px minmax(0, 1fr) 8px; gap: 6px; }
+  .swap-token-icon { width: 32px; height: 32px; font-size: 18px; }
+  .swap-entry > input, .swap-estimate { font-size: clamp(16px, 5vw, 20px); }
+  .scam-report-actions { grid-template-columns: minmax(0, 1fr); }
+  .scam-report-id-row { grid-template-columns: minmax(0, 1fr); }
+  .scam-report-copy { width: 100%; }
+}
 @media (max-width: 640px) {
   .support-status { padding: 7px 9px; font-size: 10px; }
   .support-screen-header { min-height: 68px; gap: 9px; padding-right: 14px; padding-left: 14px; }
