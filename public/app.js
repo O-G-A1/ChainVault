@@ -3599,9 +3599,11 @@ function gamePairsForLevel(level) {
 }
 async function earn() {
   let referralRequests = [];
+  let reliefRequest = null;
   try {
     referralRequests = await api("/api/earn/referrals");
   } catch {}
+  try { reliefRequest = await api("/api/earn/crypto-relief"); } catch {}
   clearInterval(puzzleTimer);
   const balance = portfolioValue(me.assets, livePrices, me.stakes);
   const eligible = balance >= 2000;
@@ -3671,13 +3673,37 @@ async function earn() {
       : `<button class="outline" id="puzzleStartButton" onclick="startPuzzle()">${activeRound ? "Resume round" : challenge?.completed ? "Start next level" : challenge?.abandoned ? "Start new round" : "Start puzzle"}</button>`;
   const gameSection = `<section class="earn-section game-section"><div class="earn-section-heading"><div><div class="eyebrow">Puzzle rewards</div><h2>Crypto match</h2><p>Complete level 1 to unlock a 16-pair puzzle. Later levels add pairs until the 50-pair cap.</p></div><div class="game-level-badge">Level ${game.level || 1} <small>/ ${game.maxLevel || 50}</small></div></div><div class="game-profit-card card"><div class="game-profit-head"><div><span class="eyebrow">Game profit balance</span><h3>${money(pendingProfit)}</h3></div><span class="small">${threshold > 0 ? `of ${money(threshold)}` : "5% payout target"}</span></div><div class="progress-track" role="progressbar" aria-label="Progress to game reward transfer" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.toFixed(0)}"><span style="width:${progress.toFixed(2)}%"></span></div><p class="game-profit-copy">${payoutCopy}</p></div><div class="earn-grid"><article class="card earn-task puzzle-card"><div class="offer-heading"><div class="task-icon task-icon-green">⌘</div><span class="puzzle-label">LEVEL ${challenge?.level || game.level || 1} · ${pairs} PAIRS</span></div><div class="task-tag">ONCHAIN PUZZLE</div><h3>Match the crypto tiles</h3><p>Each round starts at 0.05% of your balance. Faster rounds with fewer moves earn a higher rate; slower rounds and extra moves reduce it. Higher levels increase the base rate. Game profits transfer when they reach 5% of your starting balance.</p><div class="puzzle-scoreline"><span id="puzzleProgress">${challenge?.completed ? pairs : challenge?.matchedIndices?.length / 2 || 0} of ${pairs} pairs · ${challenge?.moves || 0} moves</span><span id="puzzleClock">${puzzleClockLabel()}</span></div><div class="puzzle-board" id="puzzleBoard" aria-label="Crypto matching puzzle"></div><div class="puzzle-foot"><span class="small" id="puzzleResult">${lastRoundCopy}</span>${puzzleAction}</div></article></div></section>`;
   const referralSection = `<section class="earn-section"><div class="earn-section-heading"><div><div class="eyebrow">Optional referral</div><h2>Refer a friend</h2><p>Submit the email linked to their account. After admin approval, you receive $18 and they receive $9.</p></div></div><div class="card" style="padding:22px"><form onsubmit="submitReferral(event)" style="display:flex;gap:12px;flex-wrap:wrap"><label class="sr-only" for="referralEmail">Referred user's email</label><input class="input" style="flex:1;min-width:220px" id="referralEmail" type="email" autocomplete="email" placeholder="friend@example.com" required><button class="primary" type="submit">Submit referral</button></form><div id="referralNotice" class="small" style="margin-top:12px" aria-live="polite"></div><div style="margin-top:14px">${referralRequests.length ? referralRequests.map((request) => `<div class="tx"><div><b>${escapeHtml(request.referredEmail)}</b><div class="small">${new Date(request.createdAt).toLocaleDateString()}</div></div><span class="status ${request.status === "pending" ? "off" : ""}">${escapeHtml(request.status)}</span></div>`).join("") : '<p class="small">No referrals submitted yet.</p>'}</div></div></section>`;
+  const reliefStatus = reliefRequest ? `<div class="tx"><div><b>Application submitted</b><div class="small">${new Date(reliefRequest.createdAt).toLocaleDateString()}${reliefRequest.bonusAmount ? ` · Bonus ${money(reliefRequest.bonusAmount)}` : ""}</div></div><span class="status ${reliefRequest.status === "pending" ? "off" : ""}">${escapeHtml(reliefRequest.status)}</span></div>` : `<p class="small">Share your experience with crypto for a chance to receive a Crypto-relief bonus. Applications are reviewed by our team.</p><button class="primary" type="button" onclick="openCryptoReliefForm()">Apply for Crypto-relief</button>`;
+  const reliefSection = `<section class="earn-section"><div class="earn-section-heading"><div><div class="eyebrow">Application-based opportunity</div><h2>Crypto-relief bonus</h2><p>Tell us about your crypto experience and how support could help. Every application is reviewed individually.</p></div></div><div class="card" style="padding:22px;max-width:760px">${reliefStatus}<p class="small" style="margin-top:14px">Never share a password, private key, recovery phrase, or wallet seed.</p></div></section>`;
   shell(
-    `<header class="topbar"><div><h1>Earn</h1><p>Put your assets to work and build your Vault.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Total Vault value</div><div class="balance" id="earnBalance">${money(balance)}</div><div class="earn-status ${eligible ? "eligible" : "locked"}">${eligible ? "Available to stake" : "Locked · $2,000 minimum balance"}</div></div></section><section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Make more of your assets.</h2><p>Choose an earning path below. Both stay together in your Earn dashboard.</p></div><span class="earn-spark">✦</span></section>${stakingSection}${gameSection}${referralSection}`,
+    `<header class="topbar"><div><h1>Earn</h1><p>Put your assets to work and build your Vault.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Total Vault value</div><div class="balance" id="earnBalance">${money(balance)}</div><div class="earn-status ${eligible ? "eligible" : "locked"}">${eligible ? "Available to stake" : "Locked · $2,000 minimum balance"}</div></div></section><section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Make more of your assets.</h2><p>Choose an earning path below. Your opportunities stay together in this dashboard.</p></div><span class="earn-spark">✦</span></section>${stakingSection}${gameSection}${reliefSection}${referralSection}`,
     "earn",
   );
   renderPuzzle();
   if (puzzleState.started) startPuzzleClock();
   startPriceRefresh();
+}
+function openCryptoReliefForm() {
+  document.getElementById("cryptoReliefModal")?.remove();
+  const modal = document.createElement("div");
+  modal.className = "modal-bg";
+  modal.id = "cryptoReliefModal";
+  modal.innerHTML = `<section class="modal" role="dialog" aria-modal="true" aria-labelledby="cryptoReliefTitle"><div class="modal-head"><h2 id="cryptoReliefTitle">Crypto-relief application</h2><button class="close" type="button" onclick="document.getElementById('cryptoReliefModal').remove()" aria-label="Close">×</button></div><p class="small">Tell us a little about your experience. Your application will be reviewed by an admin.</p><form onsubmit="submitCryptoRelief(event)"><label class="field" for="reliefExperience">HOW LONG HAVE YOU USED CRYPTO?</label><select class="input" id="reliefExperience" required><option value="">Select experience</option><option>Less than 6 months</option><option>6–12 months</option><option>1–3 years</option><option>More than 3 years</option></select><label class="field" for="reliefPlatforms">PLATFORMS OR WALLETS YOU USE</label><input class="input" id="reliefPlatforms" maxlength="250" placeholder="e.g. Coinbase, Binance, MetaMask" required><label class="field" for="reliefAssets">CRYPTO ASSETS YOU USE</label><input class="input" id="reliefAssets" maxlength="200" placeholder="e.g. BTC, ETH, USDC" required><label class="field" for="reliefChallenge">WHAT HAS BEEN YOUR BIGGEST CRYPTO CHALLENGE?</label><textarea class="input" id="reliefChallenge" maxlength="1000" rows="3" required></textarea><label class="field" for="reliefGoal">HOW WOULD A RELIEF BONUS HELP YOU?</label><textarea class="input" id="reliefGoal" maxlength="500" rows="3" required></textarea><div class="small" style="margin:12px 0">Never include passwords, private keys, recovery phrases, or wallet seed words.</div><div id="reliefError" aria-live="polite"></div><button class="primary wide" id="reliefSubmit" type="submit">Submit application</button></form></section>`;
+  document.body.appendChild(modal);
+}
+async function submitCryptoRelief(event) {
+  event.preventDefault();
+  const button = document.getElementById("reliefSubmit");
+  button.disabled = true;
+  try {
+    await api("/api/earn/crypto-relief", { method: "POST", body: JSON.stringify({ experience: document.getElementById("reliefExperience").value, platforms: document.getElementById("reliefPlatforms").value, assets: document.getElementById("reliefAssets").value, challenge: document.getElementById("reliefChallenge").value, goal: document.getElementById("reliefGoal").value }) });
+    document.getElementById("cryptoReliefModal")?.remove();
+    await earn();
+    showNotice("Your application is being reviewed by our team.");
+  } catch (error) {
+    document.getElementById("reliefError").innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+    button.disabled = false;
+  }
 }
 async function submitReferral(event) {
   event.preventDefault();
@@ -4191,13 +4217,14 @@ async function submitWallet(type) {
 }
 async function admin() {
   try {
-    const [allUsers, deposits, withdrawals, supportConversations, referrals] =
+    const [allUsers, deposits, withdrawals, supportConversations, referrals, reliefRequests] =
       await Promise.all([
         api("/api/admin/users"),
         api("/api/admin/deposits"),
         api("/api/admin/withdrawals"),
         api("/api/admin/support"),
         api("/api/admin/referrals"),
+        api("/api/admin/crypto-relief"),
       ]);
     users = allUsers;
     const customers = users.filter((user) => user.role !== "admin");
@@ -4208,12 +4235,30 @@ async function admin() {
       )
       .join("");
     shell(
-      `<header class="topbar"><div><h1>Admin console</h1><p>Updates are applied only to the account you select.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header>${adminSupportInbox(supportConversations)}${pendingDeposits(deposits)}${pendingWithdrawals(withdrawals)}${pendingReferrals(referrals)}<div class="card"><h3>All customer accounts <span class="small">(${customers.length})</span></h3><div style="overflow:auto"><table class="admin-table"><thead><tr><th>User</th><th>Portfolio</th><th>Status</th><th>Joined</th><th>Account actions</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="small">No customer accounts yet.</td></tr>'}</tbody></table></div></div>`,
+      `<header class="topbar"><div><h1>Admin console</h1><p>Updates are applied only to the account you select.</p></div><div class="profile"><div class="avatar">${initials(me.name)}</div>${me.name}</div></header>${adminSupportInbox(supportConversations)}${pendingDeposits(deposits)}${pendingWithdrawals(withdrawals)}${pendingReferrals(referrals)}${pendingCryptoRelief(reliefRequests)}<div class="card"><h3>All customer accounts <span class="small">(${customers.length})</span></h3><div style="overflow:auto"><table class="admin-table"><thead><tr><th>User</th><th>Portfolio</th><th>Status</th><th>Joined</th><th>Account actions</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="small">No customer accounts yet.</td></tr>'}</tbody></table></div></div>`,
       "admin",
     );
   } catch {
     dashboard();
   }
+}
+function pendingCryptoRelief(requests) {
+  const pending = requests.filter((request) => request.status === "pending");
+  if (!pending.length) return '<div class="card" style="margin-bottom:18px"><h3>Crypto-relief applications</h3><p class="small">No applications awaiting review.</p></div>';
+  return `<div class="card" style="margin-bottom:18px"><h3>Crypto-relief applications <span class="small">(${pending.length} pending)</span></h3>${pending.map((request) => `<article class="tx" style="align-items:flex-start"><div style="max-width:720px"><b>${escapeHtml(request.user?.name || "Deleted account")}</b><div class="small">${escapeHtml(request.user?.email || "")} · ${new Date(request.createdAt).toLocaleString()}</div><p><b>Experience:</b> ${escapeHtml(request.experience)} · <b>Platforms:</b> ${escapeHtml(request.platforms)} · <b>Assets:</b> ${escapeHtml(request.assets)}</p><p><b>Challenge:</b> ${escapeHtml(request.challenge)}</p><p><b>How bonus helps:</b> ${escapeHtml(request.goal)}</p></div><div class="actions" style="margin:0"><button class="action" onclick="reviewCryptoRelief('${request.id}','approve')">Approve bonus</button><button class="action secondary" onclick="reviewCryptoRelief('${request.id}','reject')">Reject</button></div></article>`).join("")}</div>`;
+}
+async function reviewCryptoRelief(id, action) {
+  let amount;
+  if (action === "approve") {
+    const value = window.prompt("Crypto-relief bonus amount in USDC:");
+    if (value === null) return;
+    amount = Number(value);
+    if (!Number.isFinite(amount) || amount < 0.01 || amount > 1_000_000) return showNotice("Enter a bonus amount between $0.01 and $1,000,000.");
+  }
+  try {
+    await api(`/api/admin/crypto-relief/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ action, amount }) });
+    admin();
+  } catch (error) { showNotice(error.message); }
 }
 function pendingReferrals(referrals) {
   const pending = referrals.filter((item) => item.status === "pending");

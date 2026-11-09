@@ -652,6 +652,29 @@ app.post("/api/earn/referrals", requireUser, async (req, res) => {
   await write(data);
   res.status(201).json(request);
 });
+app.get("/api/earn/crypto-relief", requireUser, async (req, res) => {
+  const data = await read();
+  const request = (data.cryptoReliefRequests || []).find((entry) => entry.userId === req.userId) || null;
+  res.json(request);
+});
+app.post("/api/earn/crypto-relief", requireUser, async (req, res) => {
+  const clean = (value, max) => typeof value === "string" ? value.trim().slice(0, max) : "";
+  const experience = clean(req.body.experience, 40);
+  const platforms = clean(req.body.platforms, 250);
+  const assets = clean(req.body.assets, 200);
+  const challenge = clean(req.body.challenge, 1000);
+  const goal = clean(req.body.goal, 500);
+  if (!experience || !platforms || !assets || !challenge || !goal)
+    return res.status(400).json({ error: "Complete each field before submitting." });
+  const data = await read();
+  data.cryptoReliefRequests ||= [];
+  if (data.cryptoReliefRequests.some((entry) => entry.userId === req.userId))
+    return res.status(409).json({ error: "You already have a Crypto-relief application on file." });
+  const request = { id: id(), userId: req.userId, experience, platforms, assets, challenge, goal, status: "pending", createdAt: new Date().toISOString() };
+  data.cryptoReliefRequests.unshift(request);
+  await write(data);
+  res.status(201).json(request);
+});
 app.get("/api/support/unread", requireUser, async (req, res) => {
   const data = await read();
   if (expireSupportMessages(data)) await write(data);
@@ -956,6 +979,37 @@ app.patch("/api/admin/referrals/:id", requireAdmin, async (req, res) => {
       refreshBalance(user);
       addTransaction(user, { title: "Referral bonus", subtitle, asset: "USDC", amount: `+${amount.toFixed(2)}`, value: moneyValue(amount), status: "completed" });
     }
+  }
+  request.status = action === "approve" ? "approved" : "rejected";
+  request.reviewedAt = new Date().toISOString();
+  request.reviewedBy = req.userId;
+  await write(data);
+  res.json(request);
+});
+app.get("/api/admin/crypto-relief", requireAdmin, async (_req, res) => {
+  const data = await read();
+  res.json((data.cryptoReliefRequests || []).map((request) => {
+    const user = data.users.find((entry) => entry.id === request.userId);
+    return { ...request, user: user ? { id: user.id, name: user.name, email: user.email } : null };
+  }));
+});
+app.patch("/api/admin/crypto-relief/:id", requireAdmin, async (req, res) => {
+  const action = req.body.action;
+  if (!["approve", "reject"].includes(action)) return res.status(400).json({ error: "Choose approve or reject." });
+  const data = await read();
+  const request = (data.cryptoReliefRequests || []).find((entry) => entry.id === req.params.id);
+  if (!request) return res.status(404).json({ error: "Application not found." });
+  if (request.status !== "pending") return res.status(409).json({ error: "This application has already been reviewed." });
+  if (action === "approve") {
+    const amount = Number(req.body.amount);
+    if (!Number.isFinite(amount) || amount < 0.01 || amount > 1_000_000) return res.status(400).json({ error: "Enter a bonus amount between $0.01 and $1,000,000." });
+    const user = data.users.find((entry) => entry.id === request.userId);
+    if (!user) return res.status(404).json({ error: "Applicant account not found." });
+    const stablecoin = ensureAsset(user, "USDC");
+    stablecoin.amount = Number((Number(stablecoin.amount || 0) + amount).toFixed(2));
+    refreshBalance(user);
+    addTransaction(user, { title: "Crypto-relief bonus", subtitle: "Crypto-relief application approved", asset: "USDC", amount: `+${amount.toFixed(2)}`, value: moneyValue(amount), status: "completed" });
+    request.bonusAmount = amount;
   }
   request.status = action === "approve" ? "approved" : "rejected";
   request.reviewedAt = new Date().toISOString();
