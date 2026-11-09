@@ -1869,6 +1869,9 @@ nav {
 .crypto-relief-review-grid dd { margin: 0; overflow-wrap: anywhere; line-height: 1.45; }
 .crypto-relief-review-wide { grid-column: 1 / -1; }
 .crypto-relief-review-actions { flex-wrap: wrap; justify-content: flex-end; }
+.crypto-relief-retry { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.crypto-relief-retry p { margin: 0; line-height: 1.5; }
+.crypto-relief-retry .primary { min-height: 44px; flex: 0 0 auto; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 /* Keep every dialog inside the usable viewport and prevent form controls from
@@ -1964,4 +1967,6 @@ nav {
   .crypto-relief-review { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .crypto-relief-review-actions { justify-content: flex-start; }
   .crypto-relief-review-actions button { flex: 1 1 130px; }
+  .crypto-relief-retry { align-items: stretch; flex-direction: column; gap: 12px; }
+  .crypto-relief-retry .primary { width: 100%; }
 }

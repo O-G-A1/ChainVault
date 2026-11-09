@@ -673,9 +673,9 @@ app.post("/api/earn/crypto-relief", requireUser, async (req, res) => {
     return res.status(400).json({ error: "Complete each field before submitting." });
   const data = await read();
   data.cryptoReliefRequests ||= [];
-  if (data.cryptoReliefRequests.some((entry) => entry.userId === req.userId))
+  if (data.cryptoReliefRequests.some((entry) => entry.userId === req.userId && entry.status !== "rejected"))
     return res.status(409).json({ error: "You already have a Crypto-relief application on file." });
-  const request = { id: id(), userId: req.userId, experience, platforms, assets, publicAddress, network, largestTransaction, transactionFrequency, primaryUse, challenge, goal, status: "pending", createdAt: new Date().toISOString() };
+  const request = { id: id(), userId: req.userId, experience, platforms, assets, publicAddress, network, largestTransaction, largestTransactionAmount: largestTransaction, transactionFrequency, primaryUse, challenge, goal, status: "pending", createdAt: new Date().toISOString() };
   data.cryptoReliefRequests.unshift(request);
   await write(data);
   res.status(201).json(request);
@@ -995,7 +995,8 @@ app.get("/api/admin/crypto-relief", requireAdmin, async (_req, res) => {
   const data = await read();
   res.json((data.cryptoReliefRequests || []).map((request) => {
     const user = data.users.find((entry) => entry.id === request.userId);
-    return { ...request, user: user ? { id: user.id, name: user.name, email: user.email } : null };
+    const largestTransaction = request.largestTransaction || request.largestTransactionAmount || request.transactionAmount || "";
+    return { ...request, largestTransaction, largestTransactionAmount: largestTransaction, user: user ? { id: user.id, name: user.name, email: user.email } : null };
   }));
 });
 app.patch("/api/admin/crypto-relief/:id", requireAdmin, async (req, res) => {
