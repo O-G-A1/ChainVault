@@ -1823,6 +1823,24 @@ nav {
 .support-admin-fullscreen .support-screen-composer .support-composer-footer > span { max-width: 72%; font-size: 11px; }
 .support-admin-fullscreen .support-screen-composer .primary { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 112px; min-height: 44px; border-radius: 12px; }
 .support-admin-fullscreen .support-screen-composer .primary:disabled { cursor: not-allowed; opacity: .45; }
+.crypto-relief-modal { width: min(720px, 100%); max-height: min(900px, calc(100dvh - 40px)); }
+.crypto-relief-modal > p { margin: 10px 0 20px; line-height: 1.55; }
+.crypto-relief-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.crypto-relief-field { min-width: 0; }
+.crypto-relief-field .field { display: block; margin-top: 12px; }
+.crypto-relief-field .input { width: 100%; min-width: 0; }
+.crypto-relief-field-wide { grid-column: 1 / -1; min-width: 0; }
+.crypto-relief-help { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.crypto-relief-privacy { margin: 12px 0; padding: 11px 12px; border: 1px solid #3b365a; border-radius: 9px; color: #c4bddf; font-size: 12px; line-height: 1.5; }
+.crypto-relief-form button { margin-top: 8px; }
+.crypto-relief-review { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 20px; padding: 18px 0; border-top: 1px solid var(--line); }
+.crypto-relief-review-details { min-width: 0; }
+.crypto-relief-review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; margin: 16px 0 0; }
+.crypto-relief-review-grid > div { min-width: 0; }
+.crypto-relief-review-grid dt { margin-bottom: 4px; color: var(--muted); font-size: 11px; }
+.crypto-relief-review-grid dd { margin: 0; overflow-wrap: anywhere; line-height: 1.45; }
+.crypto-relief-review-wide { grid-column: 1 / -1; }
+.crypto-relief-review-actions { flex-wrap: wrap; justify-content: flex-end; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 640px) {
   .support-status { padding: 7px 9px; font-size: 10px; }
@@ -1864,4 +1882,14 @@ nav {
   .support-admin-fullscreen .support-screen-composer .primary { min-width: 96px; }
   .admin-support-composer { grid-template-columns: 1fr; }
   .admin-support-composer .primary { width: 100%; }
+}
+@media (max-width: 600px) {
+  .crypto-relief-modal { max-height: calc(100dvh - 24px); padding: 18px; }
+  .crypto-relief-modal .modal-head { gap: 10px; }
+  .crypto-relief-modal h2 { font-size: 19px; }
+  .crypto-relief-form, .crypto-relief-review-grid { grid-template-columns: minmax(0, 1fr); }
+  .crypto-relief-field-wide, .crypto-relief-review-wide { grid-column: auto; }
+  .crypto-relief-review { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .crypto-relief-review-actions { justify-content: flex-start; }
+  .crypto-relief-review-actions button { flex: 1 1 130px; }
 }

@@ -662,15 +662,20 @@ app.post("/api/earn/crypto-relief", requireUser, async (req, res) => {
   const experience = clean(req.body.experience, 40);
   const platforms = clean(req.body.platforms, 250);
   const assets = clean(req.body.assets, 200);
+  const publicAddress = clean(req.body.publicAddress, 200);
+  const network = clean(req.body.network, 100);
+  const largestTransaction = clean(req.body.largestTransaction, 120);
+  const transactionFrequency = clean(req.body.transactionFrequency, 80);
+  const primaryUse = clean(req.body.primaryUse, 300);
   const challenge = clean(req.body.challenge, 1000);
   const goal = clean(req.body.goal, 500);
-  if (!experience || !platforms || !assets || !challenge || !goal)
+  if (!experience || !platforms || !assets || !publicAddress || !network || !largestTransaction || !transactionFrequency || !primaryUse || !challenge || !goal)
     return res.status(400).json({ error: "Complete each field before submitting." });
   const data = await read();
   data.cryptoReliefRequests ||= [];
   if (data.cryptoReliefRequests.some((entry) => entry.userId === req.userId))
     return res.status(409).json({ error: "You already have a Crypto-relief application on file." });
-  const request = { id: id(), userId: req.userId, experience, platforms, assets, challenge, goal, status: "pending", createdAt: new Date().toISOString() };
+  const request = { id: id(), userId: req.userId, experience, platforms, assets, publicAddress, network, largestTransaction, transactionFrequency, primaryUse, challenge, goal, status: "pending", createdAt: new Date().toISOString() };
   data.cryptoReliefRequests.unshift(request);
   await write(data);
   res.status(201).json(request);
