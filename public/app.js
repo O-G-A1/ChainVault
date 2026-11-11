@@ -4576,6 +4576,30 @@ async function logout() {
   clearLocalSession();
   landing();
 }
+const clickLoadingTimers = new WeakMap();
+document.addEventListener("click", (event) => {
+  const button = event.target.closest?.("button");
+  if (
+    !button ||
+    button.disabled ||
+    button.hasAttribute("aria-busy") ||
+    button.querySelector(".button-spinner")
+  )
+    return;
+
+  const existingTimer = clickLoadingTimers.get(button);
+  if (existingTimer) clearTimeout(existingTimer);
+  button.classList.add("is-click-loading");
+  button.setAttribute("aria-busy", "true");
+  clickLoadingTimers.set(
+    button,
+    window.setTimeout(() => {
+      button.classList.remove("is-click-loading");
+      button.removeAttribute("aria-busy");
+      clickLoadingTimers.delete(button);
+    }, 4000),
+  );
+});
 async function boot() {
   if (!token) return landing();
   if (checkIdleSession()) return;

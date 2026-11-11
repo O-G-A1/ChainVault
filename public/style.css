@@ -30,6 +30,23 @@ button {
   cursor: pointer;
   border: 0;
 }
+button.is-click-loading {
+  position: relative;
+}
+button.is-click-loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  width: 13px;
+  height: 13px;
+  margin-top: -7px;
+  border: 2px solid rgb(255 255 255 / 35%);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: loading-spin 0.75s linear infinite;
+  pointer-events: none;
+}
 .brand {
   font: 700 22px "Space Grotesk";
   letter-spacing: -1px;
@@ -731,6 +748,11 @@ nav {
 @keyframes loading-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  button.is-click-loading::after {
+    animation-duration: 2.5s;
   }
 }
 .modal-bg {
