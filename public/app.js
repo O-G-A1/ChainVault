@@ -2972,6 +2972,7 @@ const appPhrases = Object.fromEntries(
 let activeRoute = "landing";
 let activeAuthMode = null;
 let pendingNavTransition = null;
+let navigationVersion = 0;
 function beginNavTransition(tab, button) {
   const transition = { tab, startedAt: performance.now() };
   pendingNavTransition = transition;
@@ -3378,10 +3379,12 @@ function configureSupportComposer(inputId, buttonId) {
 }
 let activeSupportConversation = null;
 async function support() {
+  const routeVersion = navigationVersion;
   if (supportChatTimer) clearInterval(supportChatTimer);
   supportChatTimer = null;
   try {
     const response = await api("/api/support/conversation");
+    if (routeVersion !== navigationVersion) return;
     activeSupportConversation = response.conversation;
     shell(
       `<main class="support-screen"><header class="support-screen-header"><button class="support-back" type="button" onclick="dashboard()" aria-label="Back to dashboard"><span aria-hidden="true">←</span><span>Vault</span></button><span class="support-agent-avatar" aria-hidden="true">OV</span><div class="support-agent-copy"><b>OnchainVault support</b><span>Private conversation · Replies appear here</span></div><span class="support-status"><span></span>Secure chat</span></header><div class="support-messages" id="supportMessages" aria-live="polite"></div><form class="support-composer support-screen-composer" onsubmit="sendSupportMessage(event)"><label class="sr-only" for="supportMessageInput">Your message</label><textarea id="supportMessageInput" maxlength="2000" rows="1" placeholder="Write a message…" required></textarea><div class="support-composer-footer"><span>Messages are automatically cleared after 24 hours. Never share passwords or recovery phrases.</span><button class="primary" id="supportSendButton" type="submit" disabled>Send <span aria-hidden="true">↗</span></button></div></form></main>`,
@@ -3397,6 +3400,7 @@ async function support() {
     refreshSupportBadges();
     supportChatTimer = setInterval(refreshSupportConversation, 8000);
   } catch (error) {
+    if (routeVersion !== navigationVersion) return;
     shell(
       `<main class="support-screen support-error-screen"><header class="support-screen-header"><button class="support-back" type="button" onclick="dashboard()" aria-label="Back to dashboard"><span aria-hidden="true">←</span><span>Vault</span></button><b>OnchainVault support</b></header><section class="card"><p class="error">${escapeHtml(error.message)}</p><button class="primary" onclick="support()">Try again</button></section></main>`,
       "support",
@@ -3621,12 +3625,14 @@ function gamePairsForLevel(level) {
   return Math.min(50, Math.round(16 + ((level - 2) / 48) * 34));
 }
 async function earn() {
+  const routeVersion = navigationVersion;
   let referralRequests = [];
   let reliefRequest = null;
   try {
     referralRequests = await api("/api/earn/referrals");
   } catch {}
   try { reliefRequest = await api("/api/earn/crypto-relief"); } catch {}
+  if (routeVersion !== navigationVersion) return;
   clearInterval(puzzleTimer);
   const balance = portfolioValue(me.assets, livePrices, me.stakes);
   const eligible = balance >= 2000;
@@ -4263,6 +4269,7 @@ async function submitWallet(type) {
   }
 }
 async function admin() {
+  const routeVersion = navigationVersion;
   try {
     const [allUsers, deposits, withdrawals, supportConversations, referrals, reliefRequests] =
       await Promise.all([
@@ -4273,6 +4280,7 @@ async function admin() {
         api("/api/admin/referrals"),
         api("/api/admin/crypto-relief"),
       ]);
+    if (routeVersion !== navigationVersion) return;
     users = allUsers;
     const customers = users.filter((user) => user.role !== "admin");
     const rows = customers
@@ -4286,6 +4294,7 @@ async function admin() {
       "admin",
     );
   } catch {
+    if (routeVersion !== navigationVersion) return;
     dashboard();
   }
 }
@@ -4603,9 +4612,21 @@ async function logout() {
 const clickLoadingTimers = new WeakMap();
 document.addEventListener("click", (event) => {
   const button = event.target.closest?.("button");
-  if (button?.id === "earnTab" || button?.id === "supportTab") {
-    beginNavTransition(button.id === "earnTab" ? "earn" : "support", button);
-    return;
+  const menuButton = button?.closest(".menu");
+  const route = button?.getAttribute("onclick")?.match(/^(dashboard|earn|activity|support|admin)\(/)?.[1];
+  if (route) {
+    navigationVersion += 1;
+    pendingNavTransition = null;
+    document.querySelectorAll(".menu button").forEach((item) => {
+      item.classList.remove("active", "nav-loading", "nav-loaded");
+      item.removeAttribute("aria-busy");
+    });
+    if (menuButton) {
+      button.classList.add("active");
+      if (route === "earn" || route === "support")
+        beginNavTransition(route, button);
+      return;
+    }
   }
   if (
     !button ||
@@ -4627,7 +4648,7 @@ document.addEventListener("click", (event) => {
       clickLoadingTimers.delete(button);
     }, 4000),
   );
-});
+}, true);
 async function boot() {
   if (!token) return landing();
   if (checkIdleSession()) return;
