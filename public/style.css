@@ -390,6 +390,7 @@ nav {
   margin-top: 44px;
 }
 .menu button {
+  position: relative;
   width: 100%;
   padding: 13px 12px;
   color: #9ca5b6;
@@ -402,6 +403,29 @@ nav {
 .menu button:hover {
   background: #202638;
   color: white;
+}
+#earnTab.nav-loading::after,
+#earnTab.nav-loaded::after,
+#supportTab.nav-loading::after,
+#supportTab.nav-loaded::after {
+  position: absolute;
+  content: "";
+  left: 12px;
+  right: auto;
+  bottom: 4px;
+  width: 28px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--purple);
+}
+#earnTab.nav-loading::after,
+#supportTab.nav-loading::after {
+  background: linear-gradient(90deg, #8d79ff 0%, #d5ceff 48%, #8d79ff 100%);
+  background-size: 220% 100%;
+  animation: nav-indicator-flow 1s ease-in-out infinite;
+}
+@keyframes nav-indicator-flow {
+  to { background-position: -220% 0; }
 }
 .side-footer {
   position: absolute;
@@ -673,6 +697,67 @@ nav {
   border-top-color: #7c3aed;
   border-radius: 50%;
   animation: loading-spin 0.9s linear infinite;
+}
+.startup-screen {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(ellipse at 50% 32%, #282052 0, transparent 36%),
+    radial-gradient(ellipse at 15% 100%, #102b2a 0, transparent 34%),
+    #070a12;
+}
+.startup-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: min(300px, 100%);
+  padding: 34px 40px 30px;
+  border: 1px solid #ffffff12;
+  border-radius: 24px;
+  background: linear-gradient(145deg, #141a2aee, #0e1320ee);
+  box-shadow: 0 24px 80px #0006, inset 0 1px 0 #ffffff0c;
+  animation: startup-card-in 420ms ease-out both;
+}
+.startup-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  color: #d6d0ff;
+  border: 1px solid #a99bff40;
+  border-radius: 17px;
+  background: linear-gradient(145deg, #6555db, #39316e);
+  box-shadow: 0 10px 30px #6454d744;
+}
+.startup-brand-mark svg { width: 38px; height: 38px; }
+.startup-brand {
+  margin-top: 15px;
+  color: #f7f8fb;
+  font: 700 22px "Space Grotesk", sans-serif;
+  letter-spacing: -0.8px;
+}
+.startup-spinner {
+  width: 28px;
+  height: 28px;
+  margin-top: 30px;
+  border: 2px solid #a99bff35;
+  border-top-color: #b7aaff;
+  border-radius: 50%;
+  animation: loading-spin 0.9s linear infinite;
+}
+.startup-card p {
+  margin: 18px 0 5px;
+  color: #e6e7ef;
+  font-size: 14px;
+  font-weight: 600;
+}
+.startup-card small { color: #929bad; font-size: 12px; }
+@keyframes startup-card-in {
+  from { opacity: 0; transform: translateY(8px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .receive-addresses {
   background: #101725;
@@ -1377,6 +1462,15 @@ nav {
     height: 3px;
     border-radius: 3px 3px 0 0;
     background: var(--purple);
+  }
+  #earnTab.nav-loading::after,
+  #earnTab.nav-loaded::after,
+  #supportTab.nav-loading::after,
+  #supportTab.nav-loaded::after {
+    right: 12px;
+    bottom: -1px;
+    left: 12px;
+    width: auto;
   }
   .menu button:hover:not(.active) {
     color: #e5e8ef;

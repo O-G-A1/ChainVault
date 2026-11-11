@@ -2971,6 +2971,26 @@ const appPhrases = Object.fromEntries(
 );
 let activeRoute = "landing";
 let activeAuthMode = null;
+let pendingNavTransition = null;
+function beginNavTransition(tab, button) {
+  const transition = { tab, startedAt: performance.now() };
+  pendingNavTransition = transition;
+  button.classList.remove("nav-loaded");
+  button.classList.add("nav-loading");
+  button.setAttribute("aria-busy", "true");
+}
+async function finishNavTransition(tab) {
+  const transition = pendingNavTransition;
+  if (!transition || transition.tab !== tab) return;
+  const remaining = Math.max(0, 4000 - (performance.now() - transition.startedAt));
+  if (remaining) await new Promise((resolve) => setTimeout(resolve, remaining));
+  if (pendingNavTransition !== transition) return;
+  pendingNavTransition = null;
+  const button = document.getElementById(tab === "earn" ? "earnTab" : "supportTab");
+  button?.classList.remove("nav-loading");
+  button?.removeAttribute("aria-busy");
+  button?.classList.add("nav-loaded");
+}
 function localizeApp(root = document.body) {
   if (landingLanguage === "en") return;
   const phrases = appPhrases[landingLanguage] || appPhrases.en;
@@ -3275,7 +3295,9 @@ function shell(body, tab = "dashboard") {
     adminSupportChatTimer = null;
     adminSupportConversationId = null;
   }
-  app.innerHTML = `<div class="app-shell ${tab === "support" ? "support-app-shell" : ""}"><aside class="side">${brand}<div class="menu"><button class="${tab === "dashboard" ? "active" : ""}" onclick="dashboard()">◈ &nbsp; Overview</button><button class="${tab === "earn" ? "active" : ""}" onclick="earn()">✦ &nbsp; Earn</button><button class="${tab === "activity" ? "active" : ""}" onclick="activity()">⇄ &nbsp; Activity</button><button onclick="walletModal('receive')">＋ &nbsp; Add funds</button>${me.role === "admin" ? `<button class="${tab === "admin" ? "active" : ""}" onclick="admin()" id="adminTab">♙ &nbsp; Admin Console<span class="nav-badge" id="adminSupportBadge" hidden></span></button>` : `<button class="support-tab ${tab === "support" ? "active" : ""}" onclick="support()" id="supportTab">☏ &nbsp; Chat with support<span class="nav-badge" id="supportUnreadBadge" hidden></span></button>`}</div><div class="side-footer"><button class="signout-switch" type="button" onclick="logout()" aria-label="Sign out" title="Sign out"><span class="sr-only">Sign out</span><span class="signout-switch-track" aria-hidden="true"><span class="signout-switch-knob"><svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg></span></span></button></div></aside><section class="content">${body}</section></div>`;
+  app.innerHTML = `<div class="app-shell ${tab === "support" ? "support-app-shell" : ""}"><aside class="side">${brand}<div class="menu"><button class="${tab === "dashboard" ? "active" : ""}" onclick="dashboard()">◈ &nbsp; Overview</button><button id="earnTab" class="${tab === "earn" ? "active" : ""} ${pendingNavTransition?.tab === "earn" ? "nav-loading" : ""}" onclick="earn()">✦ &nbsp; Earn</button><button class="${tab === "activity" ? "active" : ""}" onclick="activity()">⇄ &nbsp; Activity</button><button onclick="walletModal('receive')">＋ &nbsp; Add funds</button>${me.role === "admin" ? `<button class="${tab === "admin" ? "active" : ""}" onclick="admin()" id="adminTab">♙ &nbsp; Admin Console<span class="nav-badge" id="adminSupportBadge" hidden></span></button>` : `<button class="support-tab ${tab === "support" ? "active" : ""} ${pendingNavTransition?.tab === "support" ? "nav-loading" : ""}" onclick="support()" id="supportTab">☏ &nbsp; Chat with support<span class="nav-badge" id="supportUnreadBadge" hidden></span></button>`}</div><div class="side-footer"><button class="signout-switch" type="button" onclick="logout()" aria-label="Sign out" title="Sign out"><span class="sr-only">Sign out</span><span class="signout-switch-track" aria-hidden="true"><span class="signout-switch-knob"><svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></svg></span></span></button></div></aside><section class="content">${body}</section></div>`;
+  if (pendingNavTransition?.tab === tab)
+    document.getElementById(tab === "earn" ? "earnTab" : "supportTab")?.setAttribute("aria-busy", "true");
   localizeApp(app);
   refreshSupportBadges();
   if (!supportBadgeTimer)
@@ -3380,6 +3402,7 @@ async function support() {
       "support",
     );
   }
+  await finishNavTransition("support");
 }
 async function refreshSupportConversation() {
   if (!document.getElementById("supportMessages")) return;
@@ -3682,6 +3705,7 @@ async function earn() {
   renderPuzzle();
   if (puzzleState.started) startPuzzleClock();
   startPriceRefresh();
+  await finishNavTransition("earn");
 }
 async function openCryptoReliefForm(retry = false) {
   document.getElementById("cryptoReliefModal")?.remove();
@@ -4579,6 +4603,10 @@ async function logout() {
 const clickLoadingTimers = new WeakMap();
 document.addEventListener("click", (event) => {
   const button = event.target.closest?.("button");
+  if (button?.id === "earnTab" || button?.id === "supportTab") {
+    beginNavTransition(button.id === "earnTab" ? "earn" : "support", button);
+    return;
+  }
   if (
     !button ||
     button.disabled ||
@@ -4603,6 +4631,7 @@ document.addEventListener("click", (event) => {
 async function boot() {
   if (!token) return landing();
   if (checkIdleSession()) return;
+  app.innerHTML = `<section class="startup-screen" role="status" aria-live="polite"><div class="startup-card"><span class="startup-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 3.5 27 10v12L16 28.5 5 22V10l11-6.5Z" fill="currentColor" opacity=".22"/><path d="M10 12.4 16 9l6 3.4v7.2L16 23l-6-3.4v-7.2Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M16 9v14M10 12.4l6 3.5 6-3.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span><div class="startup-brand">OnchainVault</div><span class="startup-spinner" aria-hidden="true"></span><p>Securing your session</p><small>Preparing your Vault…</small></div></section>`;
   try {
     me = await api("/api/me");
     dashboard();
