@@ -3123,7 +3123,17 @@ function landing() {
   app.innerHTML = `<section class="landing"><nav class="landing-nav">${brand}<div class="nav-controls"><label class="language-picker"><span aria-hidden="true">◎</span><span class="sr-only">${t[0]}</span><select aria-label="${t[0]}" onchange="setLandingLanguage(this.value)">${languageOptions}</select></label><button class="nav-toggle" id="landingNavToggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="landingNavLinks"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><div class="nav-links" id="landingNavLinks"><button class="outline" onclick="auth('login')">${t[1]}</button><button class="primary" onclick="auth('signup')">${t[2]}</button></div></div></nav><div class="hero"><div class="hero-copy"><div class="eyebrow">${t[3]}</div><h1><span>${t[4]}</span><em>${t[5]}</em></h1><p>${t[6]}</p><div class="hero-actions"><button class="primary" onclick="auth('signup')">${t[7]} <span aria-hidden="true">→</span></button><button class="text-button" onclick="auth('login')">${t[8]}</button></div><div class="hero-proof"><span>◉ ${t[9]}</span><span>◉ ${t[10]}</span></div></div><div class="wallet-preview"><div class="wallet-top"><span>${t[11]}</span><span aria-hidden="true">•••</span></div><div class="wallet-value">$24,864.21</div><span class="gain">↗ ${t[12]}</span><div class="coins"><div class="coin">₿<b>Bitcoin</b><small>${t[13]}</small></div><div class="coin">◆<b>Ethereum</b><small>${t[13]}</small></div><div class="coin">$<b>USDC</b><small>${t[14]}</small></div></div></div></div><div class="landing-body"><section class="market-section"><div class="section-heading"><div><div class="eyebrow">${t[15]}</div><h2>${t[16]}</h2></div><span class="market-status" id="landingMarketStatus">${t[17]}</span></div><div class="market-grid"><article class="market-card"><span class="token">₿</span><div><b>Bitcoin</b><small>BTC</small></div><strong data-market="BTC">—</strong></article><article class="market-card"><span class="token eth">◆</span><div><b>Ethereum</b><small>ETH</small></div><strong data-market="ETH">—</strong></article><article class="market-card"><span class="token usdc">$</span><div><b>USD Coin</b><small>USDC</small></div><strong data-market="USDC">—</strong></article></div></section><section class="feature-grid"><article><span>⌁</span><h3>${t[18]}</h3><p>${t[19]}</p></article><article><span>✓</span><h3>${t[20]}</h3><p>${t[21]}</p></article><article><span>◈</span><h3>${t[22]}</h3><p>${t[23]}</p></article></section><section class="security-callout"><div><div class="eyebrow">${reportCopy[24]}</div><h2>${reportCopy[25]}</h2><p>${reportCopy[26]}</p></div><button class="primary" type="button" onclick="openScamReportForm(this)">${reportCopy[27]}</button></section></div></section>`;
   loadLandingMarkets();
 }
-function openScamReportForm(trigger) {
+async function openScamReportForm(trigger) {
+  if (!trigger || trigger.dataset.reportOpening === "true") return;
+  trigger.dataset.reportOpening = "true";
+  trigger.disabled = true;
+  trigger.classList.add("is-click-loading");
+  trigger.setAttribute("aria-busy", "true");
+  await new Promise((resolve) => window.setTimeout(resolve, 2000));
+  clearClickLoading(trigger);
+  trigger.disabled = false;
+  delete trigger.dataset.reportOpening;
+  if (!trigger.isConnected || activeRoute !== "landing") return;
   const randomBytes = new Uint8Array(16);
   crypto.getRandomValues(randomBytes);
   const reportId = `OV-${Array.from(randomBytes, (byte) =>
@@ -3148,6 +3158,7 @@ function openScamReportForm(trigger) {
     if (submitting) return;
     document.removeEventListener("keydown", onKeyDown);
     backdrop.remove();
+    clearClickLoading(trigger);
     trigger?.focus();
   };
   const onKeyDown = (event) => {
@@ -3186,6 +3197,7 @@ function openScamReportForm(trigger) {
     window.setTimeout(() => {
       document.removeEventListener("keydown", onKeyDown);
       backdrop.remove();
+      clearClickLoading(trigger);
       trigger?.focus();
       const notice = document.createElement("div");
       notice.className = "scam-report-toast";
@@ -4037,6 +4049,8 @@ function activity() {
   );
   startTimeRefresh();
 }
+let lastClickedButton = null;
+const modalTriggers = new WeakMap();
 function walletModal(type) {
   const titles = {
     receive: "Receive assets",
@@ -4069,6 +4083,8 @@ function walletModal(type) {
     "beforeend",
     `<div class="modal-bg" id="modal"><div class="modal ${type === "swap" ? "swap-modal" : ""}"><div class="modal-head"><h2>${titles[type]}</h2><button class="close" onclick="modal.remove()">×</button></div><div id="modalError"></div>${fields}${swap}${receivePanel}${type === "swap" ? "" : `<label class="field" for="amount">AMOUNT</label><input class="input" id="amount" type="number" min="0" step="any" placeholder="0.00">`}<button class="primary wide" id="walletSubmitButton" onclick="submitWallet('${type}')">${type === "receive" ? "Request deposit approval" : type === "send" ? "Request send" : "Swap"}</button><p class="small" id="walletModalNote" style="margin-top:16px">${type === "receive" ? "Your request will appear in your activity and is credited only after blockchain confirmation." : type === "send" ? "Your balance is not deducted until blockchain confirmation." : "Review your estimated output before confirming."}</p></div></div>`,
   );
+  const walletModalElement = document.getElementById("modal");
+  if (walletModalElement && lastClickedButton) modalTriggers.set(walletModalElement, lastClickedButton);
   if (type === "receive") updateReceiveAddress("BTC");
   if (type === "swap") updateSwapQuote();
   if (type === "send") {
@@ -4258,6 +4274,8 @@ async function submitWallet(type) {
       }
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
+    const modalElement = document.getElementById("modal");
+    clearClickLoading(modalTriggers.get(modalElement));
     modal.remove();
     dashboard();
   } catch (error) {
@@ -4610,8 +4628,24 @@ async function logout() {
   landing();
 }
 const clickLoadingTimers = new WeakMap();
+function clearClickLoading(button) {
+  if (!button) return;
+  const timer = clickLoadingTimers.get(button);
+  if (timer) window.clearTimeout(timer);
+  clickLoadingTimers.delete(button);
+  button.classList.remove("is-click-loading");
+  button.removeAttribute("aria-busy");
+}
 document.addEventListener("click", (event) => {
   const button = event.target.closest?.("button");
+  if (button) lastClickedButton = button;
+  const closingModal = button?.closest(".modal-bg");
+  if (closingModal && (button.classList.contains("close") || button.classList.contains("scam-report-close"))) {
+    clearClickLoading(modalTriggers.get(closingModal));
+  }
+  if (event.target?.classList?.contains("modal-bg")) {
+    clearClickLoading(modalTriggers.get(event.target));
+  }
   const menuButton = button?.closest(".menu");
   const route = button?.getAttribute("onclick")?.match(/^(dashboard|earn|activity|support|admin)\(/)?.[1];
   if (route) {
@@ -4632,20 +4666,19 @@ document.addEventListener("click", (event) => {
     !button ||
     button.disabled ||
     button.hasAttribute("aria-busy") ||
-    button.querySelector(".button-spinner")
+    button.querySelector(".button-spinner") ||
+    button.classList.contains("close") ||
+    button.classList.contains("scam-report-close")
   )
     return;
 
-  const existingTimer = clickLoadingTimers.get(button);
-  if (existingTimer) clearTimeout(existingTimer);
+  clearClickLoading(button);
   button.classList.add("is-click-loading");
   button.setAttribute("aria-busy", "true");
   clickLoadingTimers.set(
     button,
     window.setTimeout(() => {
-      button.classList.remove("is-click-loading");
-      button.removeAttribute("aria-busy");
-      clickLoadingTimers.delete(button);
+      clearClickLoading(button);
     }, 4000),
   );
 }, true);
