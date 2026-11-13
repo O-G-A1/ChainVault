@@ -421,12 +421,17 @@ const addMonths = (date, months) => {
 };
 const processMaturedStakes = (user, market) => {
   const now = new Date();
+  now.setUTCHours(0, 0, 0, 0);
   let changed = false;
   (user.stakes || []).forEach((stake) => {
     const startedAt = new Date(stake.startedAt);
     if (!Number.isFinite(startedAt.getTime())) return;
     let due = Number(stake.maturedMonths || 0) + 1;
-    while (addMonths(startedAt, due) <= now) {
+    while (true) {
+      const maturityDate = addMonths(startedAt, due);
+      maturityDate.setUTCHours(0, 0, 0, 0);
+      if (maturityDate > now) break;
+
       const asset = ensureAsset(user, stake.symbol);
       const reward = Number((Number(stake.amount) * 0.1).toFixed(8));
       if (reward > 0) {

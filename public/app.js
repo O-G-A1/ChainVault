@@ -6,6 +6,7 @@ let supportChatTimer = null;
 let supportBadgeTimer = null;
 let adminSupportInboxTimer = null;
 let adminSupportChatTimer = null;
+let accountRefreshTimer = null;
 let adminSupportConversationId = null;
 const SESSION_IDLE_MS = 60 * 60 * 1000;
 const LAST_ACTIVITY_KEY = "vf_last_activity";
@@ -21,6 +22,8 @@ function clearLocalSession() {
   supportBadgeTimer = null;
   adminSupportInboxTimer = null;
   adminSupportChatTimer = null;
+  if (accountRefreshTimer) clearInterval(accountRefreshTimer);
+  accountRefreshTimer = null;
   activeSupportConversation = null;
   adminSupportConversationId = null;
   localStorage.removeItem("vf_token");
@@ -90,12 +93,15 @@ function inAppDialog({ title, message, confirmLabel = "OK", cancelLabel }) {
     if (cancelLabel)
       backdrop.querySelector(".device-dialog-cancel").textContent = cancelLabel;
     document.body.append(backdrop);
+    const dialogTrigger = lastClickedButton;
+    if (dialogTrigger) modalTriggers.set(backdrop, dialogTrigger);
 
     let settled = false;
     const finish = (result) => {
       if (settled) return;
       settled = true;
       document.removeEventListener("keydown", onKeyDown);
+      clearClickLoading(dialogTrigger);
       backdrop.remove();
       resolve(result);
     };
@@ -3293,6 +3299,7 @@ async function submitAuth(mode) {
 function shell(body, tab = "dashboard") {
   activeRoute = tab;
   activeAuthMode = null;
+  startAccountRefresh();
   applyLanguageDocument();
   if (tab !== "earn") clearInterval(puzzleTimer);
   if (tab !== "support" && supportChatTimer) {
@@ -3548,6 +3555,24 @@ function startPriceRefresh() {
   refreshLivePrices();
   if (!priceTimer) priceTimer = setInterval(refreshLivePrices, 60_000);
 }
+async function refreshAccount() {
+  if (!token || document.visibilityState === "hidden") return;
+  try {
+    const previousIds = new Set((me?.transactions || []).map((tx) => tx.id));
+    const freshUser = await api("/api/me");
+    const newStakeReward = (freshUser.transactions || []).some(
+      (tx) => tx.title?.endsWith("staking reward") && !previousIds.has(tx.id),
+    );
+    me = freshUser;
+    if (newStakeReward && ["dashboard", "earn", "activity"].includes(activeRoute))
+      ({ dashboard, earn, activity })[activeRoute]();
+  } catch {
+    // Keep the current screen available if an account refresh fails.
+  }
+}
+function startAccountRefresh() {
+  if (!accountRefreshTimer) accountRefreshTimer = setInterval(refreshAccount, 60_000);
+}
 function transactionRows(all = false) {
   const txs = all ? me.transactions : me.transactions.slice(0, 5);
   return (
@@ -3699,7 +3724,7 @@ async function earn() {
       const [icon, name, cls] = meta[stake.symbol] || ["•", stake.symbol, ""];
       const nextReward = stakeNextRewardDate(stake);
       const monthlyReward = Number(stake.amount) * 0.1;
-      return `<article class="card position-card"><div class="position-main"><span class="token ${cls}">${icon}</span><div><b>${name} staking</b><div class="small">${formatAssetAmount(stake.amount)} ${stake.symbol} staked</div></div></div><div class="position-stat"><span>Monthly reward</span><strong>+${formatAssetAmount(monthlyReward)} ${stake.symbol}</strong></div><div class="position-stat"><span>Next reward</span><strong>${nextReward.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}</strong></div><button class="outline unstake-button" onclick="unstake('${stake.id}')">Unstake</button></article>`;
+      return `<article class="card position-card"><div class="position-main"><span class="token ${cls}">${icon}</span><div><b>${name} staking</b><div class="small">${formatAssetAmount(stake.amount)} ${stake.symbol} staked</div></div></div><div class="position-stat"><span>Monthly reward</span><strong>+${formatAssetAmount(monthlyReward)} ${stake.symbol}</strong></div><div class="position-stat"><span>Next reward</span><strong>${nextReward.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}</strong></div><button class="outline unstake-button" onclick="unstake('${stake.id}', this)">Unstake</button></article>`;
     })
     .join("");
   const totalStakedValue = (me.stakes || []).reduce(
@@ -3707,14 +3732,14 @@ async function earn() {
       sum + Number(stake.amount || 0) * (livePrices[stake.symbol]?.usd || 0),
     0,
   );
-  const stakingSection = `<section class="earn-section staking-section"><div class="earn-section-heading"><div><div class="eyebrow">Flexible staking</div><h2>Stake crypto</h2><p>Earn 10% monthly on supported assets. Rewards are paid in the same crypto.</p></div><div class="earn-section-value"><span>Current staked value</span><strong>${money(totalStakedValue)}</strong></div></div><div class="earn-grid"><article class="card earn-task stake-offer"><div class="offer-heading"><div class="task-icon">◈</div><span class="rate-badge">10% monthly</span></div><div class="task-tag">FLEXIBLE STAKING</div><h3>Choose an asset to stake</h3><p>Stake available crypto from your balance and track each position’s next monthly reward.</p><div class="task-footer"><span class="small">Unstake any time</span><button class="primary" onclick="startStaking()" ${eligible ? "" : "disabled"}>${eligible ? "Start staking" : "Unlock at $2,000"}</button></div></article></div>${positions ? `<div class="active-stakes"><div class="section-heading"><div><div class="eyebrow">Your positions</div><h2>Active staking</h2></div><span class="small">${(me.stakes || []).length} position${(me.stakes || []).length === 1 ? "" : "s"}</span></div><div class="position-list">${positions}</div></div>` : `<p class="earn-empty-state">Your active staking positions will appear here.</p>`}</section>`;
+  const stakingSection = `<section class="earn-section staking-section"><div class="earn-section-heading"><div><div class="eyebrow">Flexible staking</div><h2>Stake crypto</h2><p>Earn 10% monthly on supported assets. Rewards are paid in the same crypto.</p></div><div class="earn-section-value"><span>Current staked value</span><strong>${money(totalStakedValue)}</strong></div></div><div class="earn-grid"><article class="card earn-task stake-offer"><div class="offer-heading"><div class="task-icon">◈</div><span class="rate-badge">10% monthly</span></div><div class="task-tag">FLEXIBLE STAKING</div><h3>Choose an asset to stake</h3><p>Stake available crypto from your balance and track each position’s next monthly reward.</p><div class="task-footer"><span class="small">Unstake any time</span><button class="primary" onclick="startStaking(this)" ${eligible ? "" : "disabled"}>${eligible ? "Start staking" : "Unlock at $2,000"}</button></div></article></div>${positions ? `<div class="active-stakes"><div class="section-heading"><div><div class="eyebrow">Your positions</div><h2>Active staking</h2></div><span class="small">${(me.stakes || []).length} position${(me.stakes || []).length === 1 ? "" : "s"}</span></div><div class="position-list">${positions}</div></div>` : `<p class="earn-empty-state">Your active staking positions will appear here.</p>`}</section>`;
   const puzzleAction =
     activeRound && puzzleState.started
       ? `<button class="outline quit-puzzle-button" id="puzzleQuitButton" onclick="quitPuzzleRound()">Quit round</button>`
       : `<button class="outline" id="puzzleStartButton" onclick="startPuzzle()">${activeRound ? "Resume round" : challenge?.completed ? "Start next level" : challenge?.abandoned ? "Start new round" : "Start puzzle"}</button>`;
   const gameSection = `<section class="earn-section game-section"><div class="earn-section-heading"><div><div class="eyebrow">Puzzle rewards</div><h2>Crypto match</h2><p>Complete level 1 to unlock a 16-pair puzzle. Later levels add pairs until the 50-pair cap.</p></div><div class="game-level-badge">Level ${game.level || 1} <small>/ ${game.maxLevel || 50}</small></div></div><div class="game-profit-card card"><div class="game-profit-head"><div><span class="eyebrow">Game profit balance</span><h3>${money(pendingProfit)}</h3></div><span class="small">${threshold > 0 ? `of ${money(threshold)}` : "5% payout target"}</span></div><div class="progress-track" role="progressbar" aria-label="Progress to game reward transfer" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress.toFixed(0)}"><span style="width:${progress.toFixed(2)}%"></span></div><p class="game-profit-copy">${payoutCopy}</p></div><div class="earn-grid"><article class="card earn-task puzzle-card"><div class="offer-heading"><div class="task-icon task-icon-green">⌘</div><span class="puzzle-label">LEVEL ${challenge?.level || game.level || 1} · ${pairs} PAIRS</span></div><div class="task-tag">ONCHAIN PUZZLE</div><h3>Match the crypto tiles</h3><p>Each round starts at 0.05% of your balance. Faster rounds with fewer moves earn a higher rate; slower rounds and extra moves reduce it. Higher levels increase the base rate. Game profits transfer when they reach 5% of your starting balance.</p><div class="puzzle-scoreline"><span id="puzzleProgress">${challenge?.completed ? pairs : challenge?.matchedIndices?.length / 2 || 0} of ${pairs} pairs · ${challenge?.moves || 0} moves</span><span id="puzzleClock">${puzzleClockLabel()}</span></div><div class="puzzle-board" id="puzzleBoard" aria-label="Crypto matching puzzle"></div><div class="puzzle-foot"><span class="small" id="puzzleResult">${lastRoundCopy}</span>${puzzleAction}</div></article></div></section>`;
   const referralSection = `<section class="earn-section"><div class="earn-section-heading"><div><div class="eyebrow">Optional referral</div><h2>Refer a friend</h2><p>Submit the email linked to their account. After admin approval, you receive $18 and they receive $9.</p></div></div><div class="card" style="padding:22px"><form onsubmit="submitReferral(event)" style="display:flex;gap:12px;flex-wrap:wrap"><label class="sr-only" for="referralEmail">Referred user's email</label><input class="input" style="flex:1;min-width:220px" id="referralEmail" type="email" autocomplete="email" placeholder="friend@example.com" required><button class="primary" type="submit">Submit referral</button></form><div id="referralNotice" class="small" style="margin-top:12px" aria-live="polite"></div><div style="margin-top:14px">${referralRequests.length ? referralRequests.map((request) => `<div class="tx"><div><b>${escapeHtml(request.referredEmail)}</b><div class="small">${new Date(request.createdAt).toLocaleDateString()}</div></div><span class="status ${request.status === "pending" ? "off" : ""}">${escapeHtml(request.status)}</span></div>`).join("") : '<p class="small">No referrals submitted yet.</p>'}</div></div></section>`;
-  const reliefStatus = reliefRequest ? `<div class="tx"><div><b>Application ${reliefRequest.status === "rejected" ? "reviewed" : "submitted"}</b><div class="small">${new Date(reliefRequest.createdAt).toLocaleDateString()}${reliefRequest.bonusAmount ? ` · Bonus ${money(reliefRequest.bonusAmount)}` : ""}</div></div><span class="status ${reliefRequest.status === "pending" ? "off" : ""}">${escapeHtml(reliefRequest.status)}</span></div>${reliefRequest.status === "rejected" ? '<div class="crypto-relief-retry"><p class="small">You can update your answers and submit a new application for review.</p><button class="primary" type="button" onclick="openCryptoReliefForm(true)">Try again</button></div>' : ""}` : `<p class="small">Share your experience with crypto for a chance to receive a Crypto-relief bonus. Applications are reviewed by our team.</p><button class="primary" type="button" onclick="openCryptoReliefForm()">Apply for Crypto-relief</button>`;
+  const reliefStatus = reliefRequest ? `<div class="tx"><div><b>Application ${reliefRequest.status === "rejected" ? "reviewed" : "submitted"}</b><div class="small">${new Date(reliefRequest.createdAt).toLocaleDateString()}${reliefRequest.bonusAmount ? ` · Bonus ${money(reliefRequest.bonusAmount)}` : ""}</div></div><span class="status ${reliefRequest.status === "pending" ? "off" : ""}">${escapeHtml(reliefRequest.status)}</span></div>${reliefRequest.status === "rejected" ? '<div class="crypto-relief-retry"><p class="small">You can update your answers and submit a new application for review.</p><button class="primary" type="button" onclick="openCryptoReliefForm(true, this)">Try again</button></div>' : ""}` : `<p class="small">Share your experience with crypto for a chance to receive a Crypto-relief bonus. Applications are reviewed by our team.</p><button class="primary" type="button" onclick="openCryptoReliefForm(false, this)">Apply for Crypto-relief</button>`;
   const reliefSection = `<section class="earn-section"><div class="earn-section-heading"><div><div class="eyebrow">Application-based opportunity</div><h2>Crypto-relief bonus</h2><p>Tell us about your crypto experience and how support could help. Every application is reviewed individually.</p></div></div><div class="card" style="padding:22px;max-width:760px">${reliefStatus}<p class="small" style="margin-top:14px">Never share a password, private key, recovery phrase, or wallet seed.</p></div></section>`;
   shell(
     `<header class="topbar"><div><h1>Earn</h1><p>Put your assets to work and build your Vault.</p></div><div class="profile"><div class="avatar">✦</div>Earn</div></header><section class="card earn-summary" data-earn-gate="${eligible}"><div><div class="balance-label">Total Vault value</div><div class="balance" id="earnBalance">${money(balance)}</div><div class="earn-status ${eligible ? "eligible" : "locked"}">${eligible ? "Available to stake" : "Locked · $2,000 minimum balance"}</div></div></section><section class="earn-welcome"><div><div class="eyebrow">Earn opportunities</div><h2>Make more of your assets.</h2><p>Choose an earning path below. Your opportunities stay together in this dashboard.</p></div><span class="earn-spark">✦</span></section>${stakingSection}${reliefSection}${gameSection}${referralSection}`,
@@ -3725,7 +3750,8 @@ async function earn() {
   startPriceRefresh();
   await finishNavTransition("earn");
 }
-async function openCryptoReliefForm(retry = false) {
+async function openCryptoReliefForm(retry = false, button) {
+  if (!(await waitForEarnModalOpen(button))) return;
   document.getElementById("cryptoReliefModal")?.remove();
   const modal = document.createElement("div");
   modal.className = "modal-bg";
@@ -3799,7 +3825,25 @@ function stakeNextRewardDate(stake) {
   date.setUTCDate(Math.min(day, lastDay));
   return date;
 }
-function startStaking() {
+const MODAL_OPEN_DELAY_MS = 2000;
+async function waitForEarnModalOpen(button) {
+  if (!button || button.dataset.modalOpening === "true") return false;
+  clearClickLoading(button);
+  button.dataset.modalOpening = "true";
+  button.disabled = true;
+  button.classList.add("is-click-loading");
+  button.setAttribute("aria-busy", "true");
+  await new Promise((resolve) =>
+    window.setTimeout(resolve, MODAL_OPEN_DELAY_MS),
+  );
+  const shouldOpen = button.isConnected && activeRoute === "earn";
+  clearClickLoading(button);
+  button.disabled = false;
+  delete button.dataset.modalOpening;
+  return shouldOpen;
+}
+async function startStaking(button) {
+  if (!(await waitForEarnModalOpen(button))) return;
   if (portfolioValue(me.assets, livePrices, me.stakes) < 2000) return;
   const available = (me.assets || []).filter(
     (asset) => Number(asset.amount) > 0,
@@ -3857,7 +3901,8 @@ async function submitStake() {
     button.textContent = "Confirm stake";
   }
 }
-async function unstake(stakeId) {
+async function unstake(stakeId, button) {
+  if (!(await waitForEarnModalOpen(button))) return;
   const accepted = await inAppDialog({
     title: "Unstake crypto?",
     message:
