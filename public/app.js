@@ -131,12 +131,17 @@ function inAppDialog({ title, message, confirmLabel = "OK", cancelLabel }) {
 function showNotice(message, title = "Please try again") {
   return inAppDialog({ title, message });
 }
-function confirmInApp(message, title = "Please confirm") {
+function confirmInApp(
+  message,
+  title = "Please confirm",
+  confirmLabel = "Delete account",
+  cancelLabel = "Keep account",
+) {
   return inAppDialog({
     title,
     message,
-    confirmLabel: "Delete account",
-    cancelLabel: "Keep account",
+    confirmLabel,
+    cancelLabel,
   });
 }
 const money = (n) =>
@@ -4349,7 +4354,7 @@ async function admin() {
     const rows = customers
       .map(
         (user) =>
-          `<tr><td><b>${escapeHtml(user.name)}</b><div class="small">@${escapeHtml(user.username)} · ${escapeHtml(user.email)}</div></td><td>${money(portfolioValue(user.assets, livePrices, user.stakes))}</td><td><span class="status ${user.verified ? "" : "off"}">${user.verified ? "Verified" : "Pending"}</span></td><td>${escapeHtml(user.createdAt)}</td><td><div class="admin-account-actions"><button class="edit" onclick="editUser('${user.id}')">Manage</button><button class="action award-bonus-action" onclick="openBonusModal('${user.id}')">Award bonus</button></div></td></tr>`,
+          `<tr><td><b>${escapeHtml(user.name)}</b><div class="small">@${escapeHtml(user.username)} · ${escapeHtml(user.email)}</div></td><td>${money(portfolioValue(user.assets, livePrices, user.stakes))}</td><td><span class="status ${user.verified ? "" : "off"}">${user.verified ? "Verified" : "Pending"}</span></td><td>${escapeHtml(user.createdAt)}</td><td><div class="admin-account-actions"><button class="edit" onclick="editUser('${user.id}')">Manage</button><button class="action award-bonus-action" onclick="openBonusModal('${user.id}')">Award bonus</button><button class="action correct-credit-action" onclick="openCreditCorrection('${user.id}')">Correct credit</button></div></td></tr>`,
       )
       .join("");
     shell(
@@ -4568,6 +4573,48 @@ function editUser(id) {
     "beforeend",
     `<div class="modal-bg" id="modal"><div class="modal"><div class="modal-head"><h2>Manage account</h2><button class="close" onclick="modal.remove()">×</button></div><label class="field">NAME</label><input class="input" id="editName" value="${escapeHtml(user.name)}"><label class="field">USERNAME</label><input class="input" id="editUsername" value="${escapeHtml(user.username)}" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}"><label class="field">EMAIL</label><input class="input" id="editEmail" value="${escapeHtml(user.email)}"><div class="form-row"><div><label class="field">CURRENT PORTFOLIO</label><div class="input" style="color:#bfc6d6">${money(portfolioValue(user.assets, livePrices, user.stakes))}</div></div><div><label class="field">MONTHLY CHANGE (%)</label><input class="input" id="editChange" type="number" value="${user.change}"></div></div><label class="field" for="adminCreditSymbol">ADD FUNDS ASSET</label><select class="input" id="adminCreditSymbol"><option value="USDC">USDC</option><option value="USDT">USDT</option><option value="ETH">ETH</option><option value="BTC">BTC</option></select><label class="field" for="adminCredit">AMOUNT TO ADD (SELECTED ASSET)</label><input class="input" id="adminCredit" type="number" min="0" step="any" placeholder="Enter an amount to add"><label class="field">WITHDRAW FUNDS (USDC)</label><input class="input" id="adminWithdrawal" type="number" min="0" step="0.01" placeholder="Enter an amount to remove"><label class="field">MINIMUM BALANCE TO WITHDRAW (USD)</label><input class="input" id="editWithdrawalLimit" type="number" min="0" step="0.01" value="${user.withdrawalLimit ?? ""}" placeholder="Leave blank to remove limit"><div class="small" style="margin-top:7px">Users cannot withdraw unless their total portfolio reaches this minimum balance. Leave blank or zero to remove it.</div><label class="field">VERIFICATION</label><select class="input" id="editVerified"><option value="true" ${user.verified ? "selected" : ""}>Verified</option><option value="false" ${!user.verified ? "selected" : ""}>Pending</option></select><button class="primary wide" onclick="saveUser('${id}')">Save changes</button><button class="danger wide" onclick="deleteUser('${id}')">Delete account</button></div></div>`,
   );
+}
+async function openCreditCorrection(userId) {
+  const user = users.find((item) => item.id === userId);
+  if (!user) return;
+  document.getElementById("creditCorrectionModal")?.remove();
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `<div class="modal-bg" id="creditCorrectionModal"><div class="modal admin-credit-correction-modal"><div class="modal-head"><h2>Correct admin credit</h2><button class="close" onclick="document.getElementById('creditCorrectionModal').remove()">×</button></div><p class="small bonus-recipient">For <strong>${escapeHtml(user.name)}</strong> · ${escapeHtml(user.email)}</p><p class="small">Only eligible admin-added credits are listed. Reversal removes the history entry and asset amount, recalculates the balance, and retains a restricted audit record.</p><div id="creditCorrectionList" class="credit-correction-list"><p class="small">Loading eligible credits…</p></div></div></div>`,
+  );
+  try {
+    const transactions = await api(`/api/admin/users/${encodeURIComponent(userId)}/credit-corrections`);
+    const list = document.getElementById("creditCorrectionList");
+    if (!list) return;
+    list.innerHTML = transactions.length
+      ? transactions.map((transaction) => {
+          const date = transaction.createdAt ? new Date(transaction.createdAt).toLocaleString() : "Date unavailable";
+          return `<div class="credit-correction-row"><div><b>${escapeHtml(transaction.title)}</b><div class="small">${transaction.amount} ${escapeHtml(transaction.asset)} · ${escapeHtml(transaction.value || "Value unavailable")}</div><div class="small">${escapeHtml(date)}</div></div><button class="action secondary" onclick="reverseAdminCredit('${userId}','${transaction.id}','${escapeHtml(transaction.asset)}',${transaction.amount})">Reverse</button></div>`;
+        }).join("")
+      : '<p class="small">No eligible admin-added credits found for this account.</p>';
+  } catch (error) {
+    const list = document.getElementById("creditCorrectionList");
+    if (list) list.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+  }
+}
+async function reverseAdminCredit(userId, transactionId, symbol, amount) {
+  if (!(await confirmInApp(
+    `This will remove the ${amount} ${symbol} admin credit from the account balance and transaction history. The correction will remain in a restricted audit record.`,
+    "Reverse admin credit?",
+    "Reverse credit",
+    "Keep credit",
+  )))
+    return;
+  try {
+    await api(`/api/admin/users/${encodeURIComponent(userId)}/credit-corrections/${encodeURIComponent(transactionId)}`, {
+      method: "POST",
+    });
+    document.getElementById("creditCorrectionModal")?.remove();
+    showNotice("Admin credit reversed and account balance recalculated.", "Credit corrected");
+    admin();
+  } catch (error) {
+    showNotice(error.message);
+  }
 }
 function openBonusModal(id) {
   const user = users.find((item) => item.id === id);

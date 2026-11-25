@@ -410,6 +410,29 @@ const ensureAsset = (user, symbol) => {
   }
   return asset;
 };
+const adminCreditForTransaction = (transaction) => {
+  if (transaction.status !== "completed" || transaction.requestId) return null;
+  const credit = transaction.adminCredit;
+  if (
+    credit &&
+    ["USDC", "USDT", "ETH", "BTC"].includes(credit.symbol) &&
+    credit.symbol === transaction.asset &&
+    Number.isFinite(Number(credit.amount)) &&
+    Number(credit.amount) > 0
+  )
+    return { symbol: credit.symbol, amount: Number(credit.amount) };
+  const legacyAdminCredit =
+    ["Recovered funds", "Funds added by admin"].includes(transaction.title) ||
+    (["Received USDT", "Received ETH", "Received BTC"].includes(transaction.title) &&
+      transaction.subtitle === "Confirmed on blockchain" &&
+      !transaction.requestId);
+  if (!legacyAdminCredit)
+    return null;
+  const amount = Number(String(transaction.amount || "").replace(/[+,]/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  if (!["USDC", "USDT", "ETH", "BTC"].includes(transaction.asset)) return null;
+  return { symbol: transaction.asset, amount };
+};
 const addMonths = (date, months) => {
   const next = new Date(date);
   const day = next.getUTCDate();
@@ -792,7 +815,73 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
   const data = await read();
   const changed = syncStoredUserBalances(data);
   if (changed) await write(data);
-  res.json(data.users.map(publicUser));
+  res.json(data.users.map((user) => publicUser(user)));
+});
+app.get("/api/admin/users/:id/credit-corrections", requireAdmin, async (req, res) => {
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.params.id);
+  if (!user) return res.status(404).json({ error: "User not found." });
+  const transactions = (user.transactions || [])
+    .map((transaction) => {
+      const credit = adminCreditForTransaction(transaction);
+      return credit
+        ? {
+            id: transaction.id,
+            title: transaction.title,
+            asset: credit.symbol,
+            amount: credit.amount,
+            value: transaction.value || "",
+            createdAt: transaction.createdAt || "",
+          }
+        : null;
+    })
+    .filter(Boolean);
+  res.json(transactions);
+});
+app.post("/api/admin/users/:id/credit-corrections/:transactionId", requireAdmin, async (req, res) => {
+  const data = await read();
+  const user = data.users.find((entry) => entry.id === req.params.id);
+  if (!user) return res.status(404).json({ error: "User not found." });
+  const transactionIndex = (user.transactions || []).findIndex(
+    (transaction) => transaction.id === req.params.transactionId,
+  );
+  if (transactionIndex === -1)
+    return res.status(404).json({ error: "Eligible admin credit not found." });
+  const transaction = user.transactions[transactionIndex];
+  const credit = adminCreditForTransaction(transaction);
+  if (!credit)
+    return res.status(400).json({ error: "Only admin-added credits can be corrected here." });
+  const asset = user.assets?.find((entry) => entry.symbol === credit.symbol);
+  const currentAmount = Number(asset?.amount || 0);
+  if (!asset || currentAmount + 1e-10 < credit.amount)
+    return res.status(409).json({
+      error: `The account no longer has enough ${credit.symbol} to safely reverse this credit.`,
+    });
+  const market = await currentMarketPrices();
+  if (market.stale && ["ETH", "BTC"].includes(credit.symbol))
+    return res.status(503).json({ error: `Live ${credit.symbol} pricing is unavailable. Please try again.` });
+  const previousAssetAmount = currentAmount;
+  const previousBalance = Number(user.balance || 0);
+  asset.amount = Math.max(0, currentAmount - credit.amount);
+  refreshBalanceAtMarket(user, market);
+  user.transactions.splice(transactionIndex, 1);
+  data.adminTransactionReversals ||= [];
+  data.adminTransactionReversals.push({
+    id: id(),
+    userId: user.id,
+    adminId: req.userId,
+    transactionId: transaction.id,
+    transaction,
+    asset: credit.symbol,
+    amount: credit.amount,
+    previousAssetAmount,
+    assetAmountAfter: asset.amount,
+    previousBalance,
+    balanceAfter: user.balance,
+    reversedAt: new Date().toISOString(),
+  });
+  await write(data);
+  res.json({ user: publicUser(user, market) });
 });
 app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
   const data = await read();
@@ -943,6 +1032,7 @@ app.post("/api/admin/users/:id/funds", requireAdmin, async (req, res) => {
     amount: `+${creditedAmount.toFixed(decimals)}`,
     value: moneyValue(creditedAmount * unitPrice),
     status: "completed",
+    adminCredit: { symbol, amount: creditedAmount },
   });
   await write(data);
   res.json(publicUser(user, market));

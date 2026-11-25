@@ -299,10 +299,15 @@ nav {
 .admin-account-actions { display: flex; align-items: center; gap: 8px; min-width: max-content; }
 .award-bonus-action { min-height: 38px; padding: 0 12px; border: 1px solid #315d47; border-radius: 9px; color: #8af0b8; background: #14271e; font-size: 12px; font-weight: 650; }
 .award-bonus-action:hover { border-color: #58a979; background: #193427; }
+.correct-credit-action { min-height: 38px; padding: 0 12px; border: 1px solid #6b5430; border-radius: 9px; color: #f0cb8a; background: #2a2317; font-size: 12px; font-weight: 650; }
+.correct-credit-action:hover { border-color: #987644; background: #352b1b; }
 .admin-bonus-modal textarea { min-height: 96px; resize: vertical; }
 .bonus-recipient { margin: 0 0 22px; line-height: 1.6; }
 .bonus-recipient strong { color: #eef1f8; }
 .field-help { margin-top: 7px; }
+.credit-correction-list { display: grid; gap: 10px; margin-top: 18px; }
+.credit-correction-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px; border: 1px solid #333b4d; border-radius: 10px; background: #0d131e; }
+.credit-correction-row .small { margin-top: 4px; }
 .admin-user-modal .danger { margin-top: 10px; }
 .active-stakes { margin-top: 36px; }
 .active-stakes .section-heading { margin-bottom: 14px; }
