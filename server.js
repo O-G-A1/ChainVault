@@ -618,9 +618,9 @@ app.post("/api/auth/logout", requireUser, async (req, res) => {
 app.post("/api/auth/heartbeat", requireUser, (_req, res) => {
   res.json({ ok: true });
 });
-const publicUser = ({ password, ...user }) => {
+const publicUser = ({ password, ...user }, market = PRICES) => {
   const safeUser = { ...user };
-  if (Array.isArray(safeUser.assets)) normalizeBalance(safeUser);
+  if (Array.isArray(safeUser.assets)) normalizeBalance(safeUser, market);
   safeUser.earnGame ||= { level: 1, pendingProfitUsd: 0, rewardCycleBalanceUsd: 0, challenge: null };
   safeUser.earnGame = gameStateForClient(safeUser.earnGame);
   return safeUser;
@@ -917,10 +917,16 @@ app.post("/api/admin/users/:id/funds", requireAdmin, async (req, res) => {
   if (!user) return res.status(404).json({ error: "User not found." });
   if (!Number.isFinite(amount) || amount <= 0)
     return res.status(400).json({ error: "Enter a valid amount to add." });
-  if (!["USDC", "USDT", "ETH"].includes(symbol))
-    return res.status(400).json({ error: "Choose USDC, USDT, or ETH." });
+  if (!["USDC", "USDT", "ETH", "BTC"].includes(symbol))
+    return res.status(400).json({ error: "Choose USDC, USDT, ETH, or BTC." });
+  const market = await currentMarketPrices();
+  if (market.stale && ["ETH", "BTC"].includes(symbol))
+    return res.status(503).json({ error: `Live ${symbol} pricing is unavailable. Please try again.` });
+  const unitPrice = market[symbol]?.usd;
+  if (!Number.isFinite(unitPrice) || unitPrice <= 0)
+    return res.status(503).json({ error: `The current ${symbol} price is unavailable. Please try again.` });
   const asset = ensureAsset(user, symbol);
-  const decimals = symbol === "ETH" ? 8 : symbol === "USDT" ? 6 : 2;
+  const decimals = symbol === "USDC" ? 2 : symbol === "USDT" ? 6 : 8;
   const creditedAmount =
     symbol === "USDC" ? amount : Number(amount.toFixed(decimals));
   if (creditedAmount <= 0)
@@ -929,17 +935,17 @@ app.post("/api/admin/users/:id/funds", requireAdmin, async (req, res) => {
     symbol === "USDC"
       ? asset.amount + creditedAmount
       : Number((Number(asset.amount || 0) + creditedAmount).toFixed(decimals));
-  refreshBalance(user);
+  refreshBalanceAtMarket(user, market);
   addTransaction(user, {
     title: symbol === "USDC" ? "Recovered funds" : `Received ${symbol}`,
     subtitle: symbol === "USDC" ? "anti-fraud recovery" : "Confirmed on blockchain",
     asset: symbol,
     amount: `+${creditedAmount.toFixed(decimals)}`,
-    value: moneyValue(creditedAmount * PRICES[symbol]),
+    value: moneyValue(creditedAmount * unitPrice),
     status: "completed",
   });
   await write(data);
-  res.json(publicUser(user));
+  res.json(publicUser(user, market));
 });
 app.post("/api/admin/users/:id/bonus", requireAdmin, async (req, res) => {
   const amount = Number(req.body.amount);
