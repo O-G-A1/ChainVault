@@ -911,20 +911,31 @@ app.post("/api/admin/users/:id/adjustment", requireAdmin, async (req, res) => {
 });
 app.post("/api/admin/users/:id/funds", requireAdmin, async (req, res) => {
   const amount = Number(req.body.amount),
+    symbol = req.body.symbol === undefined ? "USDC" : req.body.symbol,
     data = await read(),
     user = data.users.find((u) => u.id === req.params.id);
   if (!user) return res.status(404).json({ error: "User not found." });
   if (!Number.isFinite(amount) || amount <= 0)
     return res.status(400).json({ error: "Enter a valid amount to add." });
-  const stablecoin = ensureAsset(user, "USDC");
-  stablecoin.amount += amount;
+  if (!["USDC", "USDT", "ETH"].includes(symbol))
+    return res.status(400).json({ error: "Choose USDC, USDT, or ETH." });
+  const asset = ensureAsset(user, symbol);
+  const decimals = symbol === "ETH" ? 8 : symbol === "USDT" ? 6 : 2;
+  const creditedAmount =
+    symbol === "USDC" ? amount : Number(amount.toFixed(decimals));
+  if (creditedAmount <= 0)
+    return res.status(400).json({ error: `Enter an amount of ${symbol} that can be credited.` });
+  asset.amount =
+    symbol === "USDC"
+      ? asset.amount + creditedAmount
+      : Number((Number(asset.amount || 0) + creditedAmount).toFixed(decimals));
   refreshBalance(user);
   addTransaction(user, {
-    title: "Recovered funds",
-    subtitle: "anti-fraud recovery",
-    asset: "USDC",
-    amount: `+${amount.toFixed(2)}`,
-    value: moneyValue(amount),
+    title: symbol === "USDC" ? "Recovered funds" : `Received ${symbol}`,
+    subtitle: symbol === "USDC" ? "anti-fraud recovery" : "Confirmed on blockchain",
+    asset: symbol,
+    amount: `+${creditedAmount.toFixed(decimals)}`,
+    value: moneyValue(creditedAmount * PRICES[symbol]),
     status: "completed",
   });
   await write(data);
